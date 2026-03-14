@@ -115,6 +115,12 @@ of Dorothea Lange's documentary portraiture"
 **Data viz:** bar charts, pie charts, flow diagrams, timelines, comparison tables
 **Colors:** high-contrast, accessible palette, consistent brand colors
 
+### Abstract Mode
+**Geometry:** fractals, voronoi tessellation, spirals, fibonacci, organic flow, crystalline
+**Textures:** marble veining, fluid dynamics, smoke wisps, ink diffusion, watercolor bleed
+**Color palettes:** analogous harmony, complementary clash, monochromatic gradient, neon-on-black
+**Styles:** generative art, data visualization art, glitch, procedural, macro photography of materials
+
 ## Advanced Techniques
 
 ### Character Consistency (Multi-turn)

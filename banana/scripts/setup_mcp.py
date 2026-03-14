@@ -10,6 +10,7 @@ Usage:
     python3 setup_mcp.py --key YOUR_KEY     # Non-interactive
     python3 setup_mcp.py --check            # Verify existing setup
     python3 setup_mcp.py --remove           # Remove MCP config
+    python3 setup_mcp.py --help             # Show usage
 """
 
 import json
@@ -101,6 +102,18 @@ def setup_mcp(api_key: str) -> None:
 def main() -> None:
     args = sys.argv[1:]
 
+    if "--help" in args or "-h" in args:
+        print("Usage: python3 setup_mcp.py [OPTIONS]")
+        print()
+        print("Options:")
+        print("  --key KEY        Provide API key non-interactively")
+        print("  --check          Verify existing setup")
+        print("  --remove         Remove MCP configuration")
+        print("  --help, -h       Show this help message")
+        print()
+        print("Get a free API key at: https://aistudio.google.com/apikey")
+        sys.exit(0)
+
     if "--check" in args:
         check_setup()
         return
@@ -125,7 +138,11 @@ def main() -> None:
         print("=" * 40)
         print(f"\nGet your free API key at: https://aistudio.google.com/apikey")
         print()
-        api_key = input("Enter your Google AI API key: ")
+        try:
+            api_key = input("Enter your Google AI API key: ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nError: No input received. Provide a key with --key or set GOOGLE_AI_API_KEY env var.")
+            sys.exit(1)
 
     setup_mcp(api_key)
 

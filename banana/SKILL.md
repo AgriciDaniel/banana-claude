@@ -20,7 +20,6 @@ allowed-tools:
   - Edit
   - Glob
   - Grep
-  - WebFetch
 argument-hint: "[generate|edit|chat|inspire|batch|setup]"
 license: MIT
 metadata:
