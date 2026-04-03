@@ -31,6 +31,12 @@ PRICING = {
         "512": 0.020,
         "1K": 0.039,
     },
+    "replicate/nano-banana-2": {
+        "512": 0.050,
+        "1K": 0.050,
+        "2K": 0.050,
+        "4K": 0.050,
+    },
 }
 
 # Batch API gets 50% discount

@@ -15,9 +15,9 @@
 | **Aspect Ratios** | All 14 ratios including extreme: 1:4, 4:1, 1:8, 8:1 (see table below) |
 | **Max Resolution** | Up to 4096×4096 (4K tier) |
 | **Input Tokens** | 131,072 |
-| **Features** | Google Search grounding (web + image), thinking levels, image-only output, extreme aspect ratios |
+| **Features** | Google Search grounding (web + image), thinking levels, image-only output, extreme aspect ratios, HEIC/HEIF input support |
 | **Rate Limits (Free)** | ~5-15 RPM / ~20-500 RPD (per project, resets midnight Pacific. Cut ~92% Dec 2025) |
-| **Output Tokens** | ~1,290 output tokens per image |
+| **Output Tokens** | Up to ~2,520 output tokens per image |
 | **Best For** | All standard production generation and editing -- most use cases |
 
 ### gemini-2.5-flash-image -- Nano Banana (Original)
@@ -93,6 +93,10 @@ All 14 supported ratios. Availability varies by model:
 | `1:8` | Extreme tall | Narrow vertical strips | ✅ | ❌ |
 | `8:1` | Extreme wide | Ultra-wide banners | ✅ | ❌ |
 
+> **Note:** `1:4` and `1:8` are community-reported but NOT listed in Google's official
+> documentation (March 2026). Use `4:1` and `8:1` (which are officially documented)
+> for wide strips. The tall variants may work in practice but are not guaranteed.
+
 ## Resolution Tiers
 
 Control output resolution with the `imageSize` parameter. Note the **UPPERCASE** requirement -- lowercase values are silently rejected.
@@ -109,6 +113,41 @@ Control output resolution with the `imageSize` parameter. Note the **UPPERCASE**
 - Higher resolutions consume more tokens and cost more
 - The API default is `1K` if `imageSize` is omitted. The banana skill defaults to `2K` -- always pass `imageSize` explicitly
 - `imageSize` value MUST be uppercase -- `"2k"` will be silently ignored
+
+### Resolution by Aspect Ratio (Pixel Dimensions)
+
+Exact output dimensions for each aspect ratio at each resolution tier:
+
+| Ratio | 512 | 1K | 2K | 4K |
+|-------|-----|----|----|-----|
+| 1:1 | 512×512 | 1024×1024 | 2048×2048 | 4096×4096 |
+| 16:9 | — | 1376×768 | 2752×1536 | 5504×3072 |
+| 9:16 | — | 768×1376 | 1536×2752 | 3072×5504 |
+| 4:3 | — | 1152×864 | 2304×1728 | 4608×3456 |
+| 3:4 | — | 864×1152 | 1728×2304 | 3456×4608 |
+| 3:2 | — | 1152×768 | 2304×1536 | 4608×3072 |
+| 2:3 | — | 768×1152 | 1536×2304 | 3072×4608 |
+| 4:5 | — | 928×1152 | 1856×2304 | 3712×4608 |
+| 5:4 | — | 1152×928 | 2304×1856 | 4608×3712 |
+| 21:9 | — | 1536×656 | 3072×1312 | 6144×2624 |
+| 4:1 | — | 2048×512 | 4096×1024 | — |
+| 8:1 | — | 2048×256 | 4096×512 | — |
+
+"—" = not available at that resolution tier or ratio.
+
+## Input Limits
+
+| Limit | Value | Notes |
+|-------|-------|-------|
+| Max images per prompt | 14 | 10 object refs + 4 character refs |
+| Max image size (inline) | 7 MB | Direct upload / console |
+| Max image size (GCS) | 30 MB | Via Google Cloud Storage URI |
+| Total request size | 500 MB | All inputs combined |
+| Supported image formats | JPEG, PNG, WebP, HEIC, HEIF | |
+| Max people (high-fidelity) | 5 | For reliable character consistency |
+| Max objects (high-fidelity) | 6 | For reliable object preservation |
+| Recommended prompt length | 100–300 words | Diminishing returns past ~300 words |
+| Max input tokens | 131,072 | Full context window |
 
 ## API Configuration
 
@@ -154,6 +193,30 @@ Control how much the model "thinks" before generating. Higher levels improve com
 ```
 Levels: `minimal`, `low`, `medium`, `high`
 
+### Thinking Visibility
+
+Enable thought visibility to see the model's reasoning process:
+```json
+{
+  "generationConfig": {
+    "thinkingConfig": {
+      "includeThoughts": true
+    }
+  }
+}
+```
+
+When enabled, the response includes interim "thought" parts:
+- **Thought text** -- the model's reasoning about composition, style, and approach
+- **Thought images** -- interim draft images the model generates while refining (not charged)
+- Only the final image is the deliverable; thought images show the refinement process
+
+**When thinking helps most:**
+- Complex multi-element compositions (5+ elements to arrange)
+- Mathematical or scientific visualizations
+- Architectural/spatial problems
+- Any prompt requiring logical reasoning about layout
+
 ### Google Search Grounding
 Ground generation in real-world visual references. Supports web and image search (Nano Banana 2):
 ```json
@@ -190,8 +253,9 @@ Useful for character consistency, style transfer, and brand-aligned generation.
 | NB2 (3.1 Flash) | 4K | ~$0.268 | 4x standard |
 | NB (2.5 Flash) | 1K | ~$0.039 | Previous gen, budget option |
 | Batch API | Any | 50% discount | Asynchronous, higher latency |
+| Replicate (`google/nano-banana-2`) | Any | ~$0.05 est. | Alternative backend, simpler auth |
 
-Pricing is approximate and based on ~1,290 output tokens per image.
+Pricing is approximate and based on up to ~2,520 output tokens per image.
 
 ## Image Output Specs
 
@@ -224,6 +288,19 @@ Gemini uses a two-layer safety architecture:
 
 - **SynthID watermarks** are always embedded in generated images (invisible, machine-readable)
 - **C2PA metadata** is included on paid outputs (verifiable provenance chain)
+
+## Watermark Behavior by Tier
+
+| Tier | SynthID (invisible) | Visible Watermark | C2PA Metadata |
+|------|:-------------------:|:-----------------:|:-------------:|
+| Free | ✅ | ✅ Gemini sparkle | ❌ |
+| Google AI Pro ($20/mo) | ✅ | ✅ Gemini sparkle | ❌ |
+| Google AI Ultra | ✅ | ❌ None | ✅ |
+| AI Studio (API) | ✅ | ❌ None | ✅ |
+| Vertex AI | ✅ | ❌ None | ✅ |
+
+**SynthID** is always embedded -- invisible, machine-readable watermark for AI content detection.
+**C2PA** provides verifiable provenance chain for paid/enterprise outputs.
 
 ## Key Limitations
 - No video generation (image only)

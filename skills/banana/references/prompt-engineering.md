@@ -124,7 +124,40 @@ Reminiscent of Dorothea Lange's documentary portraiture"
 
 ## Advanced Techniques
 
+### Start with Intent, Refine with Specs
+
+Nano Banana 2 is designed for conversational editing. Use a two-phase approach:
+
+**Phase 1 -- Intent (Initial Generation)**
+Start with a conceptual prompt that lets the model's thinking handle composition:
+- "A futuristic sports car on a rainy Tokyo street at night"
+- "A premium product shot of wireless earbuds for an e-commerce store"
+- "A cozy café interior for a lifestyle blog header"
+
+**Phase 2 -- Specs (Refinement via Edit/Chat)**
+Follow up with specific technical adjustments:
+- "Change the car to metallic red, add wet asphalt reflections"
+- "Use a lower camera angle, add dramatic rim lighting from the left"
+- "Make the wood tones warmer, add steam rising from the coffee cup"
+
+**The PEEL Strategy for adding specs:**
+| Component | What to specify | Example |
+|-----------|----------------|---------|
+| **P**osition | Camera angle, framing, subject placement | "Low-angle shot, subject on right third" |
+| **E**xpression | Emotion, mood, facial/body language | "Confident smile, relaxed posture" |
+| **E**nvironment | Setting, time, weather, atmosphere | "Golden hour rooftop, city skyline behind" |
+| **L**ens | Camera, focal length, depth of field | "85mm f/1.4, shallow depth of field" |
+
+**Use reference images instead of written specs** when describing style or texture.
+One reference image replaces paragraphs of description. Upload it and say
+"match the lighting style of this image" or "use this color palette."
+
+**When to front-load specs:** For photorealistic/cinema domain modes where camera
+and lighting are critical, include PEEL specs in the initial prompt. For simpler
+use cases, let the model interpret intent first.
+
 ### Character Consistency (Multi-turn)
+
 Use `gemini_chat` and maintain descriptive anchors:
 - First turn: Generate character with exhaustive physical description
 - Following turns: Reference "the same character" + repeat 2-3 key identifiers
@@ -135,6 +168,80 @@ Use `gemini_chat` and maintain descriptive anchors:
 - Assign distinct names to each character ("Character A: the red-haired knight")
 - Model preserves features across different angles, actions, and environments
 - Works best when reference images show the character from multiple angles
+
+**Identity-locked generation pattern:**
+Use a `CRITICAL CONSISTENCY REQUIREMENTS` block in prompts:
+```
+Create a professional portrait of the person from the reference image.
+
+CRITICAL CONSISTENCY REQUIREMENTS:
+- Maintain EXACT facial features, skin tone, and hair from reference
+- Keep their distinctive features identical across all scenes
+- Position them naturally in the new environment
+```
+
+**Group photos (up to 5 people):**
+- Assign positions: "Person 1 center, Persons 2-3 on left, Persons 4-5 on right"
+- Specify each person's expression and pose individually
+- Use medium shot (waist up) for best facial consistency
+- Maximum 5 people for high-fidelity consistency
+
+**Sequential storytelling (3-part visual story):**
+- Scene 1: Establish character with full physical description
+- Scene 2: Reference "the same person" + 2-3 key identifiers + new setting
+- Scene 3: Same reference pattern + final setting
+- Use consistent camera angle (three-quarter view) across all scenes
+- Specify "EXACTLY consistent" for critical features
+
+**YouTube thumbnails with character:**
+- Maintain facial features from reference image
+- Use exaggerated expressions (wide eyes, open mouth) for engagement
+- Position character on left 40% of frame, facing right toward content
+- Add text overlay separately: bold Impact-style font with thick stroke
+
+### Progressive Enhancement (Multi-Turn Workflow)
+
+For `/banana chat` sessions, build images in 4 phases:
+
+| Phase | Focus | Example Follow-Up |
+|-------|-------|-------------------|
+| 1. **Composition & Subject** | Get layout, subject, framing right | "Move the subject to the left third, zoom out slightly" |
+| 2. **Lighting & Atmosphere** | Refine mood, shadows, time of day | "Shift to golden hour lighting, add warm rim light from right" |
+| 3. **Details & Polish** | Add fine elements, props, textures | "Add steam from the coffee, a small plant in the background" |
+| 4. **Technical Adjustments** | Color grading, contrast, final polish | "Slightly desaturate, add a subtle warm color grade" |
+
+**Key principle:** Each phase preserves successful elements from previous phases.
+This is more cost-effective and produces better results than trying to specify
+everything in a single prompt.
+
+### Multilingual & Localization
+
+Nano Banana 2 supports text rendering in multiple languages.
+
+**Translation within images:**
+Generate the image in English first, then follow up:
+```
+Take the previous image and translate all text to Japanese.
+Keep all visual elements, layout, colors, and composition identical.
+Only change the text content. Ensure Japanese text fits naturally
+within the same space constraints.
+```
+
+**Cultural adaptation:**
+Provide cultural context explicitly for region-specific aesthetics:
+```
+Create a coffee shop poster for the Japanese market.
+Use Japanese aesthetic principles: generous negative space,
+natural elements, muted tones. Headline in hiragana: "朝の一杯"
+in an elegant brush-style font. Format: 2:3 portrait.
+```
+
+**Tips:**
+- Provide exact text strings in the target language rather than asking for translation
+- Specify cultural context explicitly (e.g., "Japanese design sensibility," "Brazilian visual culture")
+- For RTL languages (Arabic, Hebrew), specify text direction if layout matters
+- Generate and verify one language at a time for multi-language campaigns
+- Native speaker review is recommended for production content
 
 ### Style Transfer Without Reference Images
 Describe the target style exhaustively instead of referencing an image:
@@ -163,16 +270,31 @@ Gemini does NOT support negative prompts. Rephrase exclusions:
 - Instead of "not dark" → "brightly lit, high-key lighting"
 
 ### Search-Grounded Generation
-For images based on real-world data (weather, events, statistics),
-Gemini can use Google Search grounding to incorporate live information.
-Useful for infographics with current data.
+
+For images based on real-world data, Gemini can use Google Search grounding
+to incorporate live information. Available on Nano Banana 2 via the
+`googleSearch` tool configuration.
 
 **Three-part formula for search-grounded prompts:**
 1. `[Source/Search request]` -- What to look up
 2. `[Analytical task]` -- What to analyze or extract
 3. `[Visual translation]` -- How to render it as an image
 
-**Example:** "Search for the current top 5 programming languages by GitHub usage in 2026, analyze their relative popularity percentages, then generate a clean infographic bar chart with the language logos and percentages in a modern dark theme."
+**Examples:**
+
+| Use Case | Prompt Pattern |
+|----------|---------------|
+| Weather visualization | "Search for the current 5-day forecast for Tokyo, then generate a modern weather infographic showing each day with temperature, conditions, and clothing suggestions" |
+| Data comparison | "Search for the current top 5 programming languages by GitHub usage in 2026, analyze their relative popularity, then generate a clean infographic bar chart in a modern dark theme" |
+| Historical event | "Search for the key stages of the Apollo 11 mission, then create an educational timeline infographic with illustrations for each stage" |
+| Current events | "Search for today's major sports results, then create a visual scoreboard infographic in a bold, energetic style" |
+
+**Important:** Always verify factual accuracy of generated data visualizations.
+The model may approximate or hallucinate statistics -- treat search-grounded
+infographics as drafts requiring human verification.
+
+**API configuration:** Add `"tools": [{"googleSearch": {}}]` to the generation config.
+On Replicate, use the `google_search: true` parameter for `google/nano-banana-2`.
 
 ## ❌ BANNED PROMPT KEYWORDS -- NEVER USE THESE
 
@@ -270,6 +392,11 @@ to Gemini's natural language format:
 8. **Text longer than ~25 characters** -- Rendering degrades rapidly past this limit
 9. **Burying key details at the end** -- In long prompts, details placed last may be deprioritized; put critical specifics (exact text, key constraints) in the first third of the prompt
 10. **Not iterating with follow-up prompts** -- Use `gemini_chat` for progressive refinement instead of trying to get everything right in one generation
+11. **Contradictory instructions** -- "minimalist design with lots of intricate details" confuses the model. Pick one direction or specify a focal point: "minimalist design with one carefully chosen intricate detail as the focal point"
+12. **Impossible physics** -- "two different shadows in opposite directions from a single light source." Describe physically plausible lighting setups
+13. **Inconsistent style mixing** -- "photorealistic watercolor painting" is contradictory. Choose one: "photorealistic portrait" OR "watercolor painting portrait"
+14. **Aspect ratio mismatch** -- Requesting "tall vertical portrait" but setting 16:9 landscape ratio. Always align the ratio to the composition described in the prompt
+15. **Negative framing** -- "a beach scene with no people, no clouds, no rocks" -- the model has no negative prompts. Instead: "an empty, pristine beach with just white sand, calm turquoise water, and clear blue sky"
 
 ## Proven Prompt Templates
 

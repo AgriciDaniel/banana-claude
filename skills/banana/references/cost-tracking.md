@@ -13,6 +13,7 @@
 | 2.5 Flash | 512 | $0.020 | Draft fallback |
 | 2.5 Flash | 1K | $0.039 | Standard fallback |
 | Batch API | Any | 50% of above | Asynchronous, higher latency |
+| Replicate (`google/nano-banana-2`) | Any | ~$0.05 est. | Per-second compute, check replicate.com/pricing |
 
 Pricing is approximate, based on ~1,290 output tokens per image.
 Research suggests actual costs may be ~$0.067/img. Verify at https://ai.google.dev/gemini-api/docs/pricing
@@ -22,6 +23,7 @@ Research suggests actual costs may be ~$0.067/img. Verify at https://ai.google.d
 - ~10 requests per minute (RPM)
 - ~500 requests per day (RPD)
 - Per Google Cloud project, resets midnight Pacific
+- Note: Replicate does NOT have a free tier; all usage is billed per-second compute
 
 ## Cost Tracker Commands
 

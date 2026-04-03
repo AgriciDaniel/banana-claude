@@ -3,7 +3,7 @@ name: banana
 description: "AI image generation Creative Director powered by Google Gemini Nano Banana models. Use this skill for ANY request involving image creation, editing, visual asset production, or creative direction. Triggers on: generate an image, create a photo, edit this picture, design a logo, make a banner, visual for my anything, and all /banana commands. Handles text-to-image, image editing, multi-turn creative sessions, batch workflows, and brand presets."
 argument-hint: "[generate|edit|chat|inspire|batch] <idea, path, or command>"
 metadata:
-  version: "1.4.1"
+  version: "1.4.2"
   author: AgriciDaniel
   mcp-package: "@ycse/nanobanana-mcp"
 ---
@@ -34,13 +34,30 @@ construct an optimized prompt using the 5-Component Formula from `references/pro
 | `/banana chat` | Multi-turn visual session (character/style consistent) |
 | `/banana inspire [category]` | Browse prompt database for ideas |
 | `/banana batch <idea> [N]` | Generate N variations (default: 3) |
-| `/banana setup` | Install MCP server and configure API key |
+| `/banana setup` | Install MCP server and configure Google AI API key |
+| `/banana setup replicate` | Configure Replicate API token (alternative backend) |
 | `/banana preset [list\|create\|show\|delete]` | Manage brand/style presets |
 | `/banana cost [summary\|today\|estimate]` | View cost tracking and estimates |
 
 ## Core Principle: Claude as Creative Director
 
 **NEVER** pass the user's raw text as-is to `gemini_generate_image`.
+
+### Core Principle #2: Edit First, Regenerate Last
+
+**90% of refinements should use editing, not regeneration.**
+
+When an image is 70-90% correct, use `gemini_edit_image` or `gemini_chat` to refine it.
+Only regenerate from scratch when the composition or concept is fundamentally wrong.
+
+| Scenario | Action | Why |
+|----------|--------|-----|
+| Subject and angle correct, minor tweaks needed | **EDIT** | Preserves what works, faster, cheaper |
+| Exact pose/layout must be maintained | **EDIT** | Can't recreate exact composition |
+| Color, lighting, or mood needs adjustment | **EDIT** | Targeted changes preserve structure |
+| Composition fundamentally wrong | **REGENERATE** | Easier than fixing broken layout |
+| Style completely mismatched | **REGENERATE** | Faster than iterating from wrong base |
+| Core concept is off | **REGENERATE** | Start fresh with corrected brief |
 
 Follow this pipeline for every generation -- no exceptions:
 
@@ -58,16 +75,30 @@ Follow this pipeline for every generation -- no exceptions:
 8. On success: save image, log cost, return file path and summary
 9. Never report success until a valid image file path is confirmed to exist
 
-### Step 1: Analyze Intent
+### Step 1: Analyze Intent (5-Input Creative Brief)
 
-Determine what the user actually needs:
-- What is the final use case? (blog, social, app, print, presentation)
+Gather these 5 inputs to build a complete creative brief. For simple requests,
+infer what you can. For vague requests, ASK clarifying questions.
+
+| # | Input | Question | Examples |
+|---|-------|----------|----------|
+| 1 | **Purpose** | Where will this be used? | Blog hero, YouTube thumb, e-commerce, Instagram ad, print poster |
+| 2 | **Audience** | Who is it for? | Gen Z creators, luxury buyers, busy parents, enterprise B2B |
+| 3 | **Subject** | What is the literal content? | "Matte black ceramic mug, 12oz, minimalist" — not "cool mug" |
+| 4 | **Brand Guidelines** | What vibe/feeling? | Warm + premium, bold + energetic, calm + minimal |
+| 5 | **References** | Any visual examples? | Upload images for style, texture, or composition matching |
+
+**Why this matters:** A coffee mug for e-commerce gets centered, clean lighting.
+The same mug for a homepage hero gets softer lighting, more negative space, wider
+composition. Purpose and Audience change everything.
+
+Also determine:
 - What style fits? (photorealistic, illustrated, minimal, editorial)
 - What constraints exist? (brand colors, dimensions, transparency)
 - What mood/emotion should it convey?
 
 If the request is vague (e.g., "make me a hero image"), ASK clarifying
-questions about use case, style preference, and brand context before generating.
+questions about purpose, audience, and brand context before generating.
 
 ### Step 1.5: Check for Presets
 
@@ -144,6 +175,24 @@ context and supporting elements].
 ```
 
 For more templates see `references/prompt-engineering.md` → Proven Prompt Templates.
+
+### Step 3.5: Prompt Variations (Optional)
+
+For exploratory requests or `/banana batch`, offer the user 3 prompt variations
+built from the same creative brief:
+
+| Variation | Style | Best For |
+|-----------|-------|----------|
+| **Literal** | Clean, accurate, faithful to brief | E-commerce, product pages, documentation |
+| **Creative** | Looser interpretation, mood/storytelling emphasis | Social media, blog headers, editorial |
+| **Premium** | Polished, editorial, prestigious context anchors | Ads, hero images, print, campaigns |
+
+**When to offer variations:**
+- User says "show me options" or "give me choices"
+- `/banana batch` command
+- Exploratory/brainstorming sessions
+
+**When to skip:** Simple, specific requests with clear intent → generate one optimized prompt.
 
 ### Step 4: Select Aspect Ratio
 
@@ -306,7 +355,8 @@ Default: `gemini-3.1-flash-image-preview`. Switch with `set_model` when routing 
 | `IMAGE_SAFETY` | Output blocked -- analyze prompt for triggers, suggest 2-3 rephrased alternatives. See `references/prompt-engineering.md` Safety Rephrase section. Do NOT auto-retry without user approval. |
 | `PROHIBITED_CONTENT` | Topic is blocked (violence, NSFW, real public figures). Non-retryable -- explain why and suggest alternative concepts. |
 | Safety filter false positive | Filters are overly cautious. Rephrase using abstraction, artistic framing, or metaphor. Common: "dog" blocked → try "a friendly golden retriever in a sunny park". See `references/prompt-engineering.md` Safety Rephrase Strategies. |
-| MCP unavailable | Fall back to direct API: `python3 ${CLAUDE_SKILL_DIR}/scripts/generate.py --prompt "..." --aspect-ratio "16:9"` or `python3 ${CLAUDE_SKILL_DIR}/scripts/edit.py --image PATH --prompt "..."`. These call the Gemini REST API directly with no MCP dependency. |
+| MCP unavailable | Fall back in this order: **1)** Direct Gemini API (if `GOOGLE_AI_API_KEY` is set): `python3 ${CLAUDE_SKILL_DIR}/scripts/generate.py --prompt "..."` **2)** Replicate API (if `REPLICATE_API_TOKEN` is set): `python3 ${CLAUDE_SKILL_DIR}/scripts/replicate_generate.py --prompt "..."`. For editing: use `edit.py` or `replicate_edit.py` respectively. |
+| Replicate at capacity | Replicate may throttle during peak usage. Retry after 30s, or fall back to direct Gemini API. |
 | Vague request | Ask clarifying questions before generating |
 | Poor result quality | Review Reasoning Brief -- likely too abstract. Load `references/prompt-engineering.md` Proven Templates and rebuild with specifics. |
 
@@ -325,6 +375,13 @@ After generating, always provide:
 2. **The crafted prompt** -- show the user what you sent (educational)
 3. **Settings used** -- model, aspect ratio
 4. **Suggestions** -- 1-2 refinement ideas if relevant
+5. **Quality check** (internal -- verify before presenting):
+   - [ ] Resolution matches intended use case
+   - [ ] No visible artifacts or distortions
+   - [ ] All requested elements present in the image
+   - [ ] Text is legible (if applicable, under 25 chars)
+   - [ ] Lighting and mood match the creative brief
+   - [ ] Brand guidelines satisfied (if preset or guidelines provided)
 
 ## Reference Documentation
 
@@ -332,14 +389,22 @@ Load on-demand -- do NOT load all at startup:
 - `references/prompt-engineering.md` -- Domain mode details, modifier libraries, advanced techniques
 - `references/gemini-models.md` -- Model specs, rate limits, capabilities
 - `references/mcp-tools.md` -- MCP tool parameters and response formats
+- `references/replicate.md` -- Replicate backend API reference and CLI usage
 - `references/post-processing.md` -- FFmpeg/ImageMagick pipeline recipes, green screen transparency
 - `references/cost-tracking.md` -- Pricing table, usage guide, free tier limits
 - `references/presets.md` -- Brand preset schema, examples, merge behavior
 
 ## Setup
 
+**MCP Server (primary):**
 Run `python3 scripts/setup_mcp.py` to configure the MCP server. Requires:
 - Node.js 18+ (npx)
 - Google AI API key (free at https://aistudio.google.com/apikey)
+
+**Replicate Backend (alternative):**
+Run `python3 scripts/setup_mcp.py --replicate-key YOUR_TOKEN` to configure Replicate.
+- Get a token at https://replicate.com/account/api-tokens
+- No Google Cloud setup needed -- simpler auth
+- Verify: `python3 scripts/setup_mcp.py --check-replicate`
 
 Verify: `python3 scripts/validate_setup.py`

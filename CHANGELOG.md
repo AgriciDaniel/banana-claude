@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-03-27
+
+### Added
+- **Replicate backend** -- `google/nano-banana-2` as alternative to MCP and Direct Gemini API
+  - `scripts/replicate_generate.py` -- stdlib-only generation script
+  - `scripts/replicate_edit.py` -- stdlib-only editing script
+  - `references/replicate.md` -- full reference doc with params, pricing, error handling
+- **5-Input Creative Brief** system in SKILL.md (Purpose, Audience, Subject, Brand, References)
+- **Edit-First principle** elevated to core principle with edit-vs-regenerate decision matrix
+- **Three Prompt Variations** (Literal/Creative/Premium) for `/banana batch`
+- **Quality Checklist** in response verification step
+- **PEEL Strategy** for structured spec refinement (Position, Expression, Environment, Lens)
+- **Progressive Enhancement** 4-phase workflow for `/banana chat` sessions
+- **Multilingual & Localization** section in prompt-engineering.md
+- **Expanded Character Consistency** (identity-locked patterns, group photos, storytelling)
+- **5 new Common Pitfalls** (contradictory instructions, impossible physics, style mixing, etc.)
+- **Expanded Search Grounding** with practical examples table
+- **Resolution pixel dimension tables** for all aspect ratios at 512/1K/2K/4K
+- **Input Limits section** in gemini-models.md (14 images, 7MB inline, 500MB total, HEIC/HEIF)
+- **Watermark Behavior by Tier** table (SynthID, visible sparkle, C2PA)
+- **Thinking Visibility** docs (`includeThoughts`, thought images)
+- `setup_mcp.py` now supports `--replicate-key` and `--check-replicate`
+- Replicate pricing in cost_tracker.py and cost-tracking.md
+
+### Changed
+- Prompt engineering approach: "Start with Intent, Refine with Specs" (PEEL strategy)
+- Fallback chain: MCP → Direct Gemini API → Replicate
+- Output tokens per image corrected to up to ~2,520 (was ~1,290)
+
+### Fixed
+- Free tier rate limits in cost-tracking.md corrected to ~5-15 RPM / ~20-500 RPD (was ~10 / ~500)
+
 ## [1.4.1] - 2026-03-27
 
 ### Changed
@@ -117,6 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Batch variations, multi-turn chat, prompt inspiration
 - Install script with validation
 
+[1.4.2]: https://github.com/AgriciDaniel/banana-claude/releases/tag/v1.4.2
+[1.4.1]: https://github.com/AgriciDaniel/banana-claude/releases/tag/v1.4.1
 [1.4.0]: https://github.com/AgriciDaniel/banana-claude/releases/tag/v1.4.0
 [1.3.0]: https://github.com/AgriciDaniel/banana-claude/releases/tag/v1.3.0
 [1.2.0]: https://github.com/AgriciDaniel/banana-claude/releases/tag/v1.2.0
