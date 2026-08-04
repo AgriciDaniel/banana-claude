@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The image cost ledger lost concurrent writes (`cost_tracker.py`).**
+  `skills/banana/scripts/cost_tracker.py` read and wrote `~/.banana/costs.json` with no
+  file locking on any platform and a non-atomic write, so two concurrent `log` calls both
+  read the same ledger and the second silently overwrote the first. Measured 4 entries
+  lost out of 20 concurrent `log` calls, with 3 of those processes crashing outright with
+  `JSONDecodeError` after reading a half-written file. It is easy to miss because the
+  ledger carries running aggregates (`total_cost`, `total_images`, `daily`) incremented
+  in the same write as the entry, so a lost write drops both together and the file stays
+  internally self-consistent while under-reporting. One exclusive lock now spans the
+  entire read-modify-write in `log`.
+- **No locking primitive is no longer treated as "proceed unlocked".** Locking uses
+  `fcntl` on POSIX and falls back to `msvcrt` on Windows; when neither is importable the
+  operation fails loudly instead of running unlocked.
+- **Ledger writes are atomic** (`tempfile.mkstemp` plus `os.replace`), so a crash
+  mid-write can no longer leave a truncated, unparseable ledger. A corrupt ledger now
+  fails closed with an actionable message and the file left in place for inspection,
+  instead of a bare traceback. `reset` takes the lock but deliberately does not read
+  first, so it still works as the recovery path for a corrupt ledger.
+- **`BANANA_HOME`** now overrides the ledger location, so the ledger's behaviour can be
+  exercised without touching a real spend history.
+
 ## [1.4.1] - 2026-03-27
 
 ### Changed
