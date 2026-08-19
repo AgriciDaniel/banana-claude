@@ -82,7 +82,7 @@ export function summariseFeed(id: string, feed: ModuleFeed<unknown> | undefined)
 
     case 'instagram': {
       const d = feed.data as InstagramData;
-      return `instagram: @${d.username}, ${d.followers} followers, reach ${d.reach}, engagement ${d.engagementRate.toFixed(1)}%`;
+      return `instagram: @${d.username}, ${d.followers} followers, reach ${d.reach}, views ${d.views}, engagement ${d.engagementRate.toFixed(1)}%`;
     }
 
     case 'system': {

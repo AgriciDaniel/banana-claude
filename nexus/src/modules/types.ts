@@ -230,8 +230,16 @@ export interface InstagramData {
   follows: number;
   posts: number;
   reach: number;
-  impressions: number;
-  profileViews: number;
+  /**
+   * Replaces the old `impressions`, deprecated across all API versions on
+   * 21 April 2025. Counts plays and displays across reels, posts and stories.
+   */
+  views: number;
+  /**
+   * Replaces `profile_views`, which no longer exists on the insights edge.
+   * Accounts that interacted with the profile in the period.
+   */
+  accountsEngaged: number;
   /** Follower delta per day over the reported window. */
   growth: { day: string; value: number }[];
   engagementRate: number;

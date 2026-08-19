@@ -35,8 +35,8 @@ export function InstagramPanel({ feed }: { feed: ModuleFeed<InstagramData> }) {
 
       <Section title={t('instagram.reach')}>
         <Line label={t('instagram.reached')} value={compact(d.reach)} />
-        <Line label={t('instagram.impressions')} value={compact(d.impressions)} tone="muted" />
-        <Line label={t('instagram.views')} value={compact(d.profileViews)} tone="muted" />
+        <Line label={t('instagram.views')} value={compact(d.views)} tone="muted" />
+        <Line label={t('instagram.engaged')} value={compact(d.accountsEngaged)} tone="muted" />
         <Line
           label={t('instagram.engagement')}
           value={`${d.engagementRate.toFixed(2)}%`}

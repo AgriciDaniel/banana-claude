@@ -26,9 +26,24 @@ import type { InstagramData, InstagramPost, ModuleFeed } from '@/modules/types';
 const GRAPH_FACEBOOK = 'https://graph.facebook.com/v21.0';
 const GRAPH_INSTAGRAM = 'https://graph.instagram.com';
 
+/**
+ * The insights edge returns two different shapes. Time-series metrics carry a
+ * `values` array; everything else carries a single `total_value` and requires
+ * `metric_type=total_value` on the request. Handling only the first shape was
+ * why several metrics came back as zero.
+ */
 interface InsightValue {
   name: string;
-  values: Array<{ value: number; end_time?: string }>;
+  values?: Array<{ value: number; end_time?: string }>;
+  total_value?: { value: number };
+}
+
+/** Latest number from either shape. */
+function readMetric(data: InsightValue[] | undefined, name: string): number {
+  const entry = data?.find((d) => d.name === name);
+  if (!entry) return 0;
+  if (typeof entry.total_value?.value === 'number') return entry.total_value.value;
+  return entry.values?.at(-1)?.value ?? 0;
 }
 
 async function graph<T>(
@@ -118,10 +133,20 @@ export async function fetchInstagram(
 
   const followers = profile.followers_count ?? 0;
 
-  const [accountInsights, followerSeries, media] = await Promise.all([
+  /*
+   * Two calls, because the metrics need different request shapes. `reach`
+   * supports a time series; `views` and `accounts_engaged` are total_value
+   * only. Asking for all three in one call fails the whole request.
+   *
+   * `impressions` and `profile_views` are gone: the first was deprecated on
+   * 21 April 2025 in favour of `views`, and the second no longer exists on
+   * this edge at all.
+   */
+  const [reachInsight, totals, followerSeries, media] = await Promise.all([
+    graph<{ data: InsightValue[] }>(base, `${me}/insights?metric=reach&period=day`, token, signal),
     graph<{ data: InsightValue[] }>(
       base,
-      `${me}/insights?metric=reach,impressions,profile_views&period=day`,
+      `${me}/insights?metric=views,accounts_engaged&period=day&metric_type=total_value`,
       token,
       signal,
     ),
@@ -151,8 +176,7 @@ export async function fetchInstagram(
     ),
   ]);
 
-  const metric = (name: string): number =>
-    accountInsights?.data.find((d) => d.name === name)?.values.at(-1)?.value ?? 0;
+  const reach = readMetric(reachInsight?.data, 'reach');
 
   const posts: InstagramPost[] = (media?.data ?? []).map((item) => ({
     id: item.id,
@@ -185,9 +209,9 @@ export async function fetchInstagram(
       followers,
       follows: profile.follows_count ?? 0,
       posts: profile.media_count ?? posts.length,
-      reach: metric('reach'),
-      impressions: metric('impressions'),
-      profileViews: metric('profile_views'),
+      reach,
+      views: readMetric(totals?.data, 'views'),
+      accountsEngaged: readMetric(totals?.data, 'accounts_engaged'),
       growth: (followerSeries?.data[0]?.values ?? []).map((v) => ({
         day: v.end_time?.slice(0, 10) ?? '',
         value: v.value,

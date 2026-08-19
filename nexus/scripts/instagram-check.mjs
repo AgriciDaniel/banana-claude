@@ -131,13 +131,17 @@ const target = routeB ? routeB.id : 'me';
 const label = routeB ? 'Route B (Graph API)' : 'Route A (Instagram Login)';
 ok(`${label} will be used`);
 
+// `reach` is the one account metric that still supports a plain time series;
+// `impressions` and `profile_views` were retired in 2025.
 const insights = await get(base, `${target}/insights?metric=reach&period=day`, token);
 if (insights.ok && insights.body?.data?.length) {
   ok('Insights readable \u2014 the module will show live data.');
 } else {
   bad('Profile readable, but insights are not.');
   note(insights.body?.error?.message ?? 'no message');
-  note('The token is missing instagram_manage_insights.');
+  note('The token is missing the insights permission.');
+  note('Route A needs instagram_business_manage_insights.');
+  note('Note: some metrics are unavailable below 100 followers.');
   process.exit(1);
 }
 
