@@ -1,13 +1,17 @@
 /**
- * Verifies an Instagram token before NEXUS ever tries to use it.
+ * Verifies an Instagram token and works out which API route it can use.
  *
- * Written because the failure modes here are all silent and all look alike: a
- * personal account authenticates perfectly and simply returns nothing, an
- * expired token looks like a wrong token, and a Route B token used without a
- * linked Page fails with a message about permissions rather than about Pages.
- * Each of those gets a distinct, actionable answer here.
+ * Every failure here is silent and they all look alike: a personal account
+ * authenticates perfectly and returns nothing, an expired token looks like a
+ * wrong token, and a Facebook token on an account linked to a *profile* rather
+ * than a *Page* fails with a message about permissions. Each gets a distinct,
+ * actionable answer below.
  *
- *   node scripts/instagram-check.mjs
+ * It also discovers the Instagram Business account id by itself, which is
+ * otherwise the most tedious step of the whole setup: you would have to find
+ * the Page, open Graph Explorer and read the id out by hand.
+ *
+ *   npm run instagram:check
  */
 
 import { readFile } from 'node:fs/promises';
@@ -15,6 +19,14 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+const IG = 'https://graph.instagram.com';
+const FB = 'https://graph.facebook.com/v21.0';
+
+const ok = (m) => console.log(`  \u2713 ${m}`);
+const bad = (m) => console.log(`  \u2717 ${m}`);
+const note = (m) => console.log(`    ${m}`);
+const head = (m) => console.log(`\n${m}`);
 
 /** Minimal .env.local reader; dotenv is not a dependency of this project. */
 async function loadEnv() {
@@ -27,84 +39,116 @@ async function loadEnv() {
       if (!process.env[key]) process.env[key] = raw.replace(/^["']|["']$/g, '');
     }
   } catch {
-    /* no .env.local yet — env vars may still be set another way */
+    /* no .env.local yet */
   }
 }
 
-const ok = (m) => console.log(`  \u2713 ${m}`);
-const bad = (m) => console.log(`  \u2717 ${m}`);
-const note = (m) => console.log(`    ${m}`);
+async function get(base, path, token) {
+  const separator = path.includes('?') ? '&' : '?';
+  try {
+    const res = await fetch(`${base}/${path}${separator}access_token=${token}`);
+    const body = await res.json();
+    return { ok: res.ok, status: res.status, body };
+  } catch (error) {
+    return { ok: false, status: 0, body: { error: { message: error.message } } };
+  }
+}
 
 await loadEnv();
 
 const token = process.env.INSTAGRAM_TOKEN ?? process.env.IG_GRAPH_TOKEN;
-const userId = process.env.INSTAGRAM_USER_ID;
 
-console.log('\nNEXUS \u00b7 Instagram check\n');
+console.log('\nNEXUS \u00b7 Instagram check');
 
 if (!token) {
-  bad('No token found.');
-  note('Set IG_GRAPH_TOKEN in nexus/.env.local (INSTAGRAM_TOKEN also works).');
+  head('No token found.');
+  note('Put it in nexus/.env.local as IG_GRAPH_TOKEN (INSTAGRAM_TOKEN also works).');
   note('');
-  note('To get one, on a Professional or Creator account:');
-  note('  1. developers.facebook.com  \u2192  create an app');
-  note('  2. add the "Instagram" product  \u2192  "Instagram Login"');
-  note('  3. generate a long-lived token (about 60 days, then renew)');
+  note('developers.facebook.com \u2192 create an app \u2192 add the Instagram product');
+  note('\u2192 generate a long-lived token (~60 days, then renew).');
+  note('');
+  note('Either token type works. This script figures out which one you have.');
   process.exit(1);
 }
-
-const usingInstagramLogin = !userId;
-const base = usingInstagramLogin ? 'https://graph.instagram.com' : 'https://graph.facebook.com/v21.0';
-const me = usingInstagramLogin ? 'me' : userId;
 
 ok(`Token present (${token.length} characters)`);
-note(usingInstagramLogin ? 'Route A \u2014 Instagram Login, no Facebook Page needed' : `Route B \u2014 Graph API, user id ${userId}`);
 
-const fields = 'username,account_type,followers_count,follows_count,media_count';
-let profile;
-try {
-  const res = await fetch(`${base}/${me}?fields=${fields}&access_token=${token}`);
-  profile = await res.json();
-  if (!res.ok) {
-    bad(`API returned ${res.status}`);
-    note(profile?.error?.message ?? 'no message');
-    if (!usingInstagramLogin) {
-      note('');
-      note('On Route B the account must be linked to a Facebook PAGE.');
-      note('Linking Instagram to a personal profile via Accounts Center does not count.');
-      note('Unset INSTAGRAM_USER_ID to try Route A instead.');
-    }
+// --- Route A: Instagram Login. The token identifies the account directly. ---
+head('Route A \u2014 Instagram Login (no Facebook Page needed)');
+const a = await get(IG, 'me?fields=username,account_type,followers_count,media_count', token);
+
+let routeA = null;
+if (a.ok && a.body.username) {
+  ok(`@${a.body.username}${a.body.account_type ? ` \u00b7 ${a.body.account_type}` : ''}`);
+  if (a.body.account_type === 'PERSONAL') {
+    bad('This account is PERSONAL \u2014 no API returns statistics for it.');
+    note('Instagram app \u2192 Settings \u2192 Account type and tools \u2192 switch to Professional.');
     process.exit(1);
   }
-} catch (error) {
-  bad(`Request failed: ${error.message}`);
+  routeA = a.body;
+} else {
+  bad(a.body?.error?.message ?? `rejected (${a.status})`);
+  note('Normal if this is a Facebook token rather than an Instagram one.');
+}
+
+// --- Route B: Graph API. Requires a PAGE, and the id can be discovered. -----
+head('Route B \u2014 Graph API via Facebook (requires a Page)');
+const pages = await get(FB, 'me/accounts?fields=name,instagram_business_account{id,username}', token);
+
+let routeB = null;
+if (pages.ok && Array.isArray(pages.body.data)) {
+  if (pages.body.data.length === 0) {
+    bad('The token sees no Facebook Pages.');
+    note('This is what "linked to a profile rather than a Page" looks like.');
+    note('Linking Instagram to a personal profile via Accounts Center does not count.');
+  }
+  for (const page of pages.body.data) {
+    const linked = page.instagram_business_account;
+    if (linked) {
+      ok(`Page "${page.name}" \u2192 @${linked.username ?? '?'} (id ${linked.id})`);
+      routeB = linked;
+    } else {
+      note(`Page "${page.name}" has no Instagram account attached`);
+    }
+  }
+} else {
+  bad(pages.body?.error?.message ?? `rejected (${pages.status})`);
+  note('Normal if this is an Instagram token rather than a Facebook one.');
+}
+
+// --- Conclusion -------------------------------------------------------------
+head('Result');
+
+if (!routeA && !routeB) {
+  bad('Neither route works with this token.');
+  note('Most likely the token is expired, or was issued without the');
+  note('instagram_basic / instagram_manage_insights permissions.');
   process.exit(1);
 }
 
-ok(`Authenticated as @${profile.username}`);
+const base = routeB ? FB : IG;
+const target = routeB ? routeB.id : 'me';
+const label = routeB ? 'Route B (Graph API)' : 'Route A (Instagram Login)';
+ok(`${label} will be used`);
 
-if (profile.account_type && profile.account_type === 'PERSONAL') {
-  bad('This is a PERSONAL account.');
-  note('No API returns statistics for a personal account, whatever the token.');
-  note('Instagram app \u2192 Settings \u2192 Account type and tools \u2192 switch to Professional.');
-  process.exit(1);
-}
-
-ok(`Account type: ${profile.account_type ?? 'not reported'}`);
-if (typeof profile.followers_count === 'number') ok(`Followers: ${profile.followers_count}`);
-if (typeof profile.media_count === 'number') ok(`Posts: ${profile.media_count}`);
-
-const insights = await fetch(
-  `${base}/${me}/insights?metric=reach&period=day&access_token=${token}`,
-).then((r) => r.json()).catch(() => null);
-
-if (insights?.data?.length) {
-  ok('Insights readable \u2014 the Instagram module will show live data.');
+const insights = await get(base, `${target}/insights?metric=reach&period=day`, token);
+if (insights.ok && insights.body?.data?.length) {
+  ok('Insights readable \u2014 the module will show live data.');
 } else {
   bad('Profile readable, but insights are not.');
-  note(insights?.error?.message ?? 'no message');
-  note('The token likely lacks the insights permission.');
+  note(insights.body?.error?.message ?? 'no message');
+  note('The token is missing instagram_manage_insights.');
   process.exit(1);
 }
 
-console.log('\nReady. Start NEXUS and open the Instagram module.\n');
+head('Put this in nexus/.env.local');
+console.log(`\n  IG_GRAPH_TOKEN=<your token>`);
+if (routeB) {
+  console.log(`  INSTAGRAM_USER_ID=${routeB.id}`);
+  note('');
+  note('The user id is what selects Route B. Remove it to force Route A.');
+} else {
+  note('');
+  note('No user id: its absence is what selects Route A.');
+}
+console.log('\nThen start NEXUS and open the Instagram module.\n');
