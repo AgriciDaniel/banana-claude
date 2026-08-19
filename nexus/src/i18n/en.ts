@@ -358,6 +358,7 @@ export const en = {
   'log.twoGroup': 'TWO HANDS / GATHER',
   'log.twoSplit': 'TWO HANDS / FAN OUT',
   'log.twoSelect': 'TWO HANDS / MARKED {count}',
+  'instagram.noInsights': 'AUDIENCE FIGURES BELOW ARE UNAVAILABLE: THE TOKEN LACKS instagram_business_manage_insights. PROFILE AND POSTS ARE LIVE.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

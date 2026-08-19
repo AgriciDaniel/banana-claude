@@ -177,6 +177,12 @@ export async function fetchInstagram(
   ]);
 
   const reach = readMetric(reachInsight?.data, 'reach');
+  /*
+   * Both insight calls returning nothing means the permission is absent, not
+   * that the week was quiet. The profile and media endpoints need only
+   * instagram_business_basic, so the module stays useful either way.
+   */
+  const insightsAvailable = Boolean(reachInsight?.data || totals?.data);
 
   const posts: InstagramPost[] = (media?.data ?? []).map((item) => ({
     id: item.id,
@@ -219,6 +225,7 @@ export async function fetchInstagram(
       engagementRate,
       reels: posts.filter((p) => p.mediaType === 'VIDEO' || p.mediaType === 'REELS').length,
       top: [...posts].sort((a, b) => b.likes + b.comments - (a.likes + a.comments)).slice(0, 6),
+      insightsAvailable,
     },
   };
 }

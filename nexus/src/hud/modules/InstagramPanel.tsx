@@ -33,6 +33,12 @@ export function InstagramPanel({ feed }: { feed: ModuleFeed<InstagramData> }) {
         <Line label={t('instagram.reels')} value={String(d.reels)} tone="muted" />
       </Section>
 
+      {!d.insightsAvailable && (
+        <p className="mt-3 border-l border-signal/40 py-1 pl-2.5 font-mono text-[9px] leading-[15px] tracking-[0.08em] text-signal/80">
+          {t('instagram.noInsights')}
+        </p>
+      )}
+
       <Section title={t('instagram.reach')}>
         <Line label={t('instagram.reached')} value={compact(d.reach)} />
         <Line label={t('instagram.views')} value={compact(d.views)} tone="muted" />

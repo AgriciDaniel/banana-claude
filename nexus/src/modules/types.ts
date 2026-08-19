@@ -245,6 +245,15 @@ export interface InstagramData {
   engagementRate: number;
   reels: number;
   top: InstagramPost[];
+  /**
+   * False when the token can read the profile and media but not the insights
+   * edge — the normal state without `instagram_business_manage_insights`.
+   *
+   * Worth a flag rather than silent zeroes: reach and views legitimately read
+   * zero on a quiet day, so a reader cannot tell a missing permission from a
+   * quiet week unless the module says which one it is.
+   */
+  insightsAvailable: boolean;
 }
 
 // ---------------------------------------------------------------------------

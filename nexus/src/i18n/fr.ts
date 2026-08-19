@@ -364,4 +364,5 @@ export const fr: Record<TranslationKey, string> = {
   'log.twoGroup': 'DEUX MAINS / REGROUPER',
   'log.twoSplit': 'DEUX MAINS / DÉPLOYER',
   'log.twoSelect': 'DEUX MAINS / {count} MARQUÉS',
+  'instagram.noInsights': "LES CHIFFRES D'AUDIENCE CI-DESSOUS SONT INDISPONIBLES : LE JETON N'A PAS instagram_business_manage_insights. LE PROFIL ET LES PUBLICATIONS SONT EN DIRECT.",
 };
