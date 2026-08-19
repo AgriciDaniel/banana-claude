@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "setup:assets": "node scripts/setup-assets.mjs",
-    "postinstall": "node scripts/setup-assets.mjs"
+    "postinstall": "node scripts/setup-assets.mjs",
+    "instagram:check": "node scripts/instagram-check.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.21",
