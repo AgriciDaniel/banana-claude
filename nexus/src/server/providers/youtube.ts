@@ -20,8 +20,13 @@ function key(): string | null {
   return value.length > 0 ? value : null;
 }
 
-/** Keys from aistudio.google.com. They only ever speak to Gemini. */
-function isAiStudioKey(value: string): boolean {
+/**
+ * The "AQ." family: keys bound to a service account and restricted to the
+ * Gemini and Vertex Agent Platform APIs. They are handed out by AI Studio and
+ * by the Cloud console's Gemini flow alike, so the origin is no guide -- what
+ * matters is that the restriction cannot be widened to cover YouTube.
+ */
+function isGeminiOnlyKey(value: string): boolean {
   return value.startsWith('AQ.');
 }
 
@@ -42,8 +47,8 @@ function isTruncatedKey(value: string): boolean {
 const SHADOWED_HINT =
   'The YOUTUBE_API_KEY being read is too short to be a real key. Something is supplying a placeholder: check for a YOUTUBE_API_KEY already set in your shell or in your Windows user environment variables, because those take precedence over .env.local and a key pasted into the file will be ignored while one exists.';
 
-const AI_STUDIO_HINT =
-  'That is an AI Studio key (the "AQ." kind) and it only works with Gemini - enabling YouTube Data API v3 cannot change that, because the key belongs to no Cloud project. Create one at console.cloud.google.com under APIs and services, Credentials, Create credentials, API key. It will start with "AIza".';
+const GEMINI_ONLY_HINT =
+  'That key starts with "AQ.", which means it is tied to a service account and restricted to the Gemini and Vertex Agent Platform APIs. Its API restriction cannot be widened to YouTube, so enabling YouTube Data API v3 changes nothing for it. You need a plain API key: console.cloud.google.com, APIs and services, Credentials, Create credentials, API key - not linked to a service account, restricted to YouTube Data API v3. It will start with "AIza" and be about forty characters.';
 
 async function api<T>(
   path: string,
@@ -67,19 +72,19 @@ async function api<T>(
     }
 
     /*
-     * The one that wastes an afternoon. An AI Studio key -- the kind handed
-     * out at aistudio.google.com, recognisable by its "AQ." prefix -- is
-     * scoped to the Generative Language API and belongs to no Cloud project,
-     * so YouTube can never accept it however many APIs you enable.
+     * The one that wastes an afternoon. An "AQ." key is bound to a service
+     * account and its API restriction is fixed to Gemini and Vertex, so
+     * YouTube can never accept it however many APIs the project has enabled.
+     * The console offers no way to widen it; a different key is the only fix.
      *
      * The diagnosis keys off the PREFIX rather than the response, because
      * Google gives two different answers for the same cause: 401 "API keys are
      * not supported by this API" to one caller and 400 "API key not valid" to
-     * another, seemingly depending on headers. Both send people hunting for an
+     * another, seemingly on headers alone. Both send people hunting for an
      * OAuth flow that is not the problem. The prefix does not vary.
      */
-    if (isAiStudioKey(apiKey)) {
-      throw new Error(AI_STUDIO_HINT);
+    if (isGeminiOnlyKey(apiKey)) {
+      throw new Error(GEMINI_ONLY_HINT);
     }
 
     if (response.status === 403) throw new Error('YouTube rejected the API key');
@@ -148,14 +153,14 @@ export async function fetchYoutube(
     };
   }
 
-  if (apiKey && isAiStudioKey(apiKey)) {
+  if (apiKey && isGeminiOnlyKey(apiKey)) {
     return {
       status: 'unconfigured',
       data: null,
       error: null,
       fetchedAt: Date.now(),
       source: 'YouTube',
-      setupHint: AI_STUDIO_HINT,
+      setupHint: GEMINI_ONLY_HINT,
     };
   }
 
