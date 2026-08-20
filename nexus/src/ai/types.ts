@@ -66,6 +66,11 @@ export interface SceneContext {
    * instead of going to the web and returning a different figure.
    */
   readings: string[];
+  /**
+   * Recommendations made in earlier sessions, with the figure as it stood at
+   * the time. Lets the assistant re-adapt a plan instead of reissuing it.
+   */
+  proposals?: string[];
 }
 
 export interface StreamEvent {

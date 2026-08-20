@@ -10,7 +10,7 @@
  * a module, or a click on a thumbnail can all request the same surface.
  */
 
-export type MediaKind = 'image' | 'video' | 'shape';
+export type MediaKind = 'image' | 'video' | 'shape' | 'chart';
 
 /** The parametric solids the assistant can summon. */
 export type ShapeKind =
@@ -36,12 +36,47 @@ export interface ShapeSpec {
   glass?: number;
 }
 
+/**
+ * A statistic made visible.
+ *
+ * Charts exist so an analysis can be argued rather than asserted. The parts
+ * that matter are not the bars: they are `benchmark` and `note`. A number on
+ * its own tells the user where they are; a number against a reference tells
+ * them whether that is good, and the note says what to do about it. Every
+ * chart is expected to carry a source, because a figure with no provenance is
+ * not evidence.
+ */
+export type ChartKind = 'bar' | 'line' | 'donut' | 'kpi' | 'funnel' | 'flow';
+
+export interface ChartPoint {
+  label: string;
+  value: number;
+  /** Marks this point as the user's own figure among comparisons. */
+  mine?: boolean;
+}
+
+export interface ChartSpec {
+  kind: ChartKind;
+  title: string;
+  /** Where the figures came from and when. Rendered small, always shown. */
+  source?: string;
+  points: ChartPoint[];
+  /** Appended to every value: '%', 'K', 'min', 'EUR'. */
+  unit?: string;
+  /** A reference value drawn across the plot -- the median, the target. */
+  benchmark?: number;
+  benchmarkLabel?: string;
+  /** One line of "so what". This is the recommendation, not a description. */
+  note?: string;
+}
+
 export interface MediaItem {
   id: string;
   kind: MediaKind;
   /** Image and video only. Always routed through /api/media. */
   src?: string;
   shape?: ShapeSpec;
+  chart?: ChartSpec;
   title?: string;
   /** Shown small beneath the frame. Provenance, as everywhere else. */
   caption?: string;

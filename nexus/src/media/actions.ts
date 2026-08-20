@@ -2,7 +2,7 @@ import { useMediaStore } from "@/stores/useMediaStore";
 import { getAudio } from "@/audio/AudioEngine";
 import { log } from "@/stores/useLogStore";
 import { t } from "@/i18n";
-import type { MediaItem, ShapeSpec } from "./types";
+import type { ChartSpec, MediaItem, ShapeSpec } from "./types";
 
 /**
  * Placing things in the room.
@@ -59,6 +59,25 @@ export function showVideo(
   log.ok(
     t("log.mediaShown", { what: options.title ?? options.caption ?? "video" }),
   );
+  return id;
+}
+
+/**
+ * Put a statistic in the room.
+ *
+ * Charts are logged by their title rather than by "chart", because the title
+ * is the claim being made and that is what belongs in the record.
+ */
+export function showChart(spec: ChartSpec, options: { caption?: string } = {}): string {
+  const id = useMediaStore.getState().show({
+    kind: 'chart',
+    chart: spec,
+    title: spec.title,
+    caption: options.caption ?? spec.source,
+    origin: 'assistant',
+  });
+  getAudio().expand();
+  log.ok(t('log.mediaShown', { what: spec.title }));
   return id;
 }
 

@@ -20,6 +20,7 @@ import { PALETTE } from '@/config/theme';
 import { interaction } from '@/stores/runtime';
 import { envRuntime } from '@/stores/useEnvironmentStore';
 import { useMediaStore } from '@/stores/useMediaStore';
+import { getChartTexture, REVEAL_STEPS } from './chartTexture';
 import { Spring, Spring3 } from '@/animation/Spring';
 import { SPRINGS } from '@/animation/presets';
 import type { MediaItem } from '@/media/types';
@@ -42,6 +43,9 @@ const WIDTH = 2.5;
 /** Depth offsets for the stack behind the focused frame. */
 const STEP = 0.34;
 
+/** A chart is painted at 1024x640, so it always hangs in that proportion. */
+const CHART_ASPECT = 1024 / 640;
+
 export function MediaFrame({ item, index }: { item: MediaItem; index: number }) {
   const group = useRef<Group>(null);
   const plane = useRef<Mesh>(null);
@@ -49,12 +53,26 @@ export function MediaFrame({ item, index }: { item: MediaItem; index: number }) 
   const [texture, setTexture] = useState<Texture | null>(null);
   const [failed, setFailed] = useState(false);
   const setAspect = useMediaStore((s) => s.setAspect);
+  const [revealStep, setRevealStep] = useState(0);
 
   const focused = index === 0;
 
+  /*
+   * Charts draw themselves, so they need no loader -- but they do need to grow
+   * in, because a bar chart that simply appears reads as a screenshot. The
+   * spring below advances a step counter and the painter is asked for that
+   * step, which keeps repaints to two dozen for the whole animation instead of
+   * one per frame.
+   */
+  const reveal = useMemo(() => new Spring(0, SPRINGS.glide), []);
+  const chartTexture = useMemo(
+    () => (item.chart ? getChartTexture(item.chart, revealStep) : null),
+    [item.chart, revealStep],
+  );
+
   // --- texture ------------------------------------------------------------
   useEffect(() => {
-    if (item.kind === 'shape' || !item.src) return;
+    if (item.kind === 'shape' || item.kind === 'chart' || !item.src) return;
     let disposed = false;
 
     if (item.kind === 'video') {
@@ -109,7 +127,7 @@ export function MediaFrame({ item, index }: { item: MediaItem; index: number }) 
 
   useEffect(() => () => texture?.dispose(), [texture]);
 
-  const aspect = item.aspect ?? 1;
+  const aspect = item.kind === 'chart' ? CHART_ASPECT : (item.aspect ?? 1);
   const height = WIDTH / Math.max(0.4, Math.min(3, aspect));
 
   const uniforms = useMemo(
@@ -143,6 +161,13 @@ export function MediaFrame({ item, index }: { item: MediaItem; index: number }) 
   useFrame((_, delta) => {
     const dt = delta > 0.05 ? 0.05 : delta;
     const t = interaction.sceneTime;
+
+    if (item.kind === 'chart') {
+      reveal.set(1);
+      reveal.update(dt);
+      const step = Math.round(reveal.value * REVEAL_STEPS);
+      if (step !== revealStep) setRevealStep(step);
+    }
 
     // Stacked frames sit back and to the side, dimmer and smaller.
     motion.position.set(index * 0.42, -index * 0.12, -index * STEP);
@@ -188,8 +213,8 @@ export function MediaFrame({ item, index }: { item: MediaItem; index: number }) 
         <mesh ref={plane}>
           <planeGeometry args={[WIDTH, height]} />
           <meshBasicMaterial
-            map={texture ?? undefined}
-            color={texture ? '#ffffff' : PALETTE.slate}
+            map={chartTexture ?? texture ?? undefined}
+            color={chartTexture || texture ? '#ffffff' : PALETTE.slate}
             transparent
             opacity={0}
             side={DoubleSide}

@@ -8,7 +8,16 @@ import { localizeModule } from '@/i18n/modules';
 import { getAudio } from '@/audio/AudioEngine';
 import { bus } from '@/stores/bus';
 import type { CommandCall, CommandResult } from './types';
-import { clearMedia, generateImage, showImage, showShape } from '@/media/actions';
+import type { ChartSpec } from '@/media/types';
+import { proposalLines, rememberChart } from './strategyMemory';
+import {
+  clearMedia,
+  generateImage,
+  showChart,
+  showImage,
+  showShape,
+  showVideo,
+} from '@/media/actions';
 import type { ShapeKind } from '@/media/types';
 import { useFeedStore } from '@/modules/store';
 import { summariseFeed } from '@/modules/summary';
@@ -103,6 +112,66 @@ export const COMMAND_DECLARATIONS = [
       type: 'OBJECT',
       properties: {
         url: { type: 'STRING', description: 'Direct URL to the image or video file.' },
+        title: { type: 'STRING' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'show_chart',
+    description:
+      'Draw a statistic in the room as a chart. Use this whenever you cite figures - a comparison, a trend, a share, a single headline number. Always fill in "source". Set "benchmark" to the reference the user should be measured against, and "note" to the one action you recommend as a result. A chart without a benchmark and a note is only decoration.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        kind: {
+          type: 'STRING',
+          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow'],
+          description:
+            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1).',
+        },
+        title: { type: 'STRING', description: 'The claim the chart makes, in a few words.' },
+        source: {
+          type: 'STRING',
+          description: 'Where the figures came from and when, e.g. "Metricool 2025 study" or "Instagram module, live".',
+        },
+        unit: { type: 'STRING', description: 'Appended to values: %, K, min, EUR.' },
+        points: {
+          type: 'ARRAY',
+          description:
+            'Two to six points. For kpi, exactly one. For flow, up to five steps whose labels are the steps themselves.',
+          items: {
+            type: 'OBJECT',
+            properties: {
+              label: { type: 'STRING' },
+              value: { type: 'NUMBER' },
+              mine: {
+                type: 'BOOLEAN',
+                description: "True for the user's own figure, so it is highlighted against the rest.",
+              },
+            },
+            required: ['label', 'value'],
+          },
+        },
+        benchmark: { type: 'NUMBER', description: 'Reference value drawn across the plot.' },
+        benchmarkLabel: { type: 'STRING', description: 'Two or three words naming the reference.' },
+        note: {
+          type: 'STRING',
+          description:
+            'One sentence saying what to DO about what the chart shows. Imperative, concrete, specific to this user.',
+        },
+      },
+      required: ['kind', 'title', 'points'],
+    },
+  },
+  {
+    name: 'show_video',
+    description:
+      'Play a clip in the room. Requires a direct video file URL (mp4 or webm), never a page or a watch link.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        url: { type: 'STRING', description: 'Direct URL to the video file.' },
         title: { type: 'STRING' },
       },
       required: ['url'],
@@ -278,6 +347,64 @@ export function executeCommand(call: CommandCall): CommandResult {
       break;
     }
 
+    case 'show_chart': {
+      const raw = Array.isArray(call.args.points) ? call.args.points : [];
+      /*
+       * A flow has no quantities -- its points are steps -- so a model that
+       * omits `value` there is right, not wrong. Dropping those points left
+       * the chart empty and the request silently refused, so the value is
+       * supplied instead of demanded.
+       */
+      const stepsOnly = call.args.kind === 'flow';
+      const points = raw
+        .map((p) => p as { label?: unknown; value?: unknown; mine?: unknown })
+        .filter((p) => stepsOnly || (typeof p.value === 'number' && Number.isFinite(p.value)))
+        .slice(0, 6)
+        .map((p) => ({
+          label: String(p.label ?? ''),
+          value: typeof p.value === 'number' && Number.isFinite(p.value) ? Number(p.value) : 1,
+          mine: p.mine === true,
+        }));
+      if (points.length === 0) {
+        result = fail('a chart needs at least one point with a numeric value');
+        break;
+      }
+      const kind = String(call.args.kind ?? 'bar') as ChartSpec['kind'];
+      const spec: ChartSpec = {
+        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow'].includes(kind) ? kind : 'bar',
+        title: String(call.args.title ?? '').slice(0, 90) || 'Sans titre',
+        points,
+        source: typeof call.args.source === 'string' ? call.args.source.slice(0, 80) : undefined,
+        unit: typeof call.args.unit === 'string' ? call.args.unit.slice(0, 8) : undefined,
+        benchmark:
+          typeof call.args.benchmark === 'number' && Number.isFinite(call.args.benchmark)
+            ? call.args.benchmark
+            : undefined,
+        benchmarkLabel:
+          typeof call.args.benchmarkLabel === 'string'
+            ? call.args.benchmarkLabel.slice(0, 28)
+            : undefined,
+        note: typeof call.args.note === 'string' ? call.args.note.slice(0, 160) : undefined,
+      };
+      showChart(spec);
+      // A charted recommendation is a commitment; keep it for next time.
+      rememberChart(spec);
+      result = { name: call.name, ok: true, detail: `charted ${spec.title}` };
+      break;
+    }
+
+    case 'show_video': {
+      const url = String(call.args.url ?? '').trim();
+      if (!/^https?:\/\//i.test(url)) {
+        result = fail('a direct http(s) video URL is required');
+        break;
+      }
+      const title = typeof call.args.title === 'string' ? call.args.title : undefined;
+      showVideo(url, { title });
+      result = { name: call.name, ok: true, detail: `playing ${title ?? url}` };
+      break;
+    }
+
     case 'show_shape': {
       const kind = String(call.args.shape ?? '') as ShapeKind;
       const allowed: ShapeKind[] = [
@@ -349,5 +476,8 @@ export function readSceneContext() {
     }),
     quality: useSystemStore.getState().tier,
     readings: readModuleReadings(),
+    // Carried on every turn so an analysis can build on the last one rather
+    // than starting the same diagnosis over.
+    proposals: proposalLines(useLocaleStore.getState().locale),
   };
 }

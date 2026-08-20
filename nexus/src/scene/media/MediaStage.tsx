@@ -39,16 +39,23 @@ export function MediaStage() {
     if (!group.current) return;
     const dt = delta > 0.05 ? 0.05 : delta;
 
-    // Aside and slightly back while a module holds the centre.
+    /*
+     * Aside while a module holds the centre -- but only just. The module panel
+     * opens on the right, so the content steps left; step it any further and a
+     * chart ends up behind the telemetry panel in the corner, which is the one
+     * moment the user most wants to read it. The yaw is gentle for the same
+     * reason: a photograph survives being turned away, a column of figures
+     * does not.
+     */
     motion.set(
-      expandedId ? -2.75 : 0,
-      expandedId ? 0.3 : STAGE_Y,
-      SPACE.orbitRadius + (expandedId ? 1.2 : 2.1),
+      expandedId ? -2.1 : 0,
+      expandedId ? 0.45 : STAGE_Y,
+      SPACE.orbitRadius + (expandedId ? 1.7 : 2.1),
     );
     motion.update(dt);
 
     group.current.position.set(motion.x.value, motion.y.value, motion.z.value);
-    group.current.rotation.y = expandedId ? 0.34 : 0;
+    group.current.rotation.y = expandedId ? 0.2 : 0;
     group.current.visible = stack.length > 0;
   });
 

@@ -41,7 +41,12 @@ const GROUNDING = process.env.GEMINI_GROUNDING !== "0";
  */
 const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET ?? "0");
 /** Tool round trips per turn. Two is enough for "open X and tell me about it". */
-const MAX_TOOL_DEPTH = 2;
+/*
+ * An analysis legitimately chains several steps -- search the benchmark, chart
+ * the figure, then say what to do about it -- so two was too few. Four is the
+ * point where a loop is no longer working towards an answer.
+ */
+const MAX_TOOL_DEPTH = 4;
 
 interface GeminiPart {
   text?: string;
@@ -149,7 +154,16 @@ async function runTurn(
   system: string,
   signal: AbortSignal,
 ): Promise<void> {
-  const upstream = await callGemini(contents, key, system, signal, GROUNDING);
+  // Past the cap the model answers with words or not at all.
+  const mayCallTools = depth < MAX_TOOL_DEPTH;
+  const upstream = await callGemini(
+    contents,
+    key,
+    system,
+    signal,
+    GROUNDING,
+    mayCallTools,
+  );
 
   if (!upstream.ok || !upstream.body) {
     const detail = await upstream.text().catch(() => "");
@@ -206,7 +220,7 @@ async function runTurn(
     }
   });
 
-  if (calls.length === 0 || depth >= MAX_TOOL_DEPTH || signal.aborted) return;
+  if (calls.length === 0 || signal.aborted) return;
 
   /*
    * The commands were dispatched to the client the moment they arrived and have
@@ -222,6 +236,12 @@ async function runTurn(
     },
   }));
 
+  /*
+   * At the cap, take the functions away rather than simply stopping. A turn
+   * that ends on a function call has performed an action and said nothing, so
+   * the user watches the room change while the assistant stays mute. Denied
+   * any tool, the model has no option left but to answer in words.
+   */
   await runTurn(
     [
       ...contents,
@@ -242,8 +262,10 @@ function callGemini(
   system: string,
   signal: AbortSignal,
   grounded: boolean,
+  mayCallTools = true,
 ): Promise<Response> {
-  const tools: unknown[] = [{ functionDeclarations: COMMAND_DECLARATIONS }];
+  const tools: unknown[] = [];
+  if (mayCallTools) tools.push({ functionDeclarations: COMMAND_DECLARATIONS });
   if (grounded) tools.push({ googleSearch: {} });
 
   return withRetry(
@@ -254,7 +276,9 @@ function callGemini(
         body: JSON.stringify({
           contents,
           systemInstruction: { parts: [{ text: system }] },
-          tools,
+          // An empty tools array is not the same as no tools, and the API
+          // rejects it. The final turn may legitimately have neither.
+          ...(tools.length > 0 ? { tools } : {}),
           // Built-in tools (search) and our own functions may only be combined
           // when server-side tool invocations are explicitly opted into.
           ...(grounded
