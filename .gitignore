@@ -35,3 +35,4 @@ cover-options/
 .playwright-mcp/
 media-*.png
 chart-*.png
+slide-*.png

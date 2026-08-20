@@ -62,9 +62,17 @@ export function MediaFrame({
   const [texture, setTexture] = useState<Texture | null>(null);
   const [failed, setFailed] = useState(false);
   const setAspect = useMediaStore((s) => s.setAspect);
+  const currentTopic = useMediaStore((s) => s.topic);
   const [revealStep, setRevealStep] = useState(0);
 
-  const focused = index === 0 && !retiring;
+  /*
+   * Belongs to a question that has been superseded. It is not gone -- a
+   * follow-up that draws nothing should still leave the user looking at what
+   * they were discussing -- but it stops holding the centre, so the room reads
+   * as being about the current question.
+   */
+  const stale = !retiring && item.topic !== currentTopic;
+  const focused = index === 0 && !retiring && !stale;
 
   /*
    * Charts draw themselves, so they need no loader -- but they do need to grow
@@ -185,6 +193,16 @@ export function MediaFrame({
       motion.position.set(index * 0.3, -0.5, -index * STEP - 1.1);
       motion.scale.set(0.5);
       motion.opacity.set(0);
+    } else if (stale) {
+      /*
+       * Reduced and parked to one side. Setting it straight back instead put
+       * it among the ring cards, where a half-transparent chart interleaved
+       * with a module face and read as clutter rather than as something
+       * finished. Off to the left it stays available without competing.
+       */
+      motion.position.set(-1.95 - index * 0.22, -0.62 - index * 0.1, -0.55 - index * STEP);
+      motion.scale.set(0.46 - index * 0.04);
+      motion.opacity.set(0.26 - index * 0.07);
     } else {
       motion.position.set(index * 0.42, -index * 0.12, -index * STEP);
       motion.scale.set(focused ? 1 : 0.86 - index * 0.05);

@@ -337,7 +337,16 @@ async function callGemini(
           temperature: 0.75,
           topP: 0.95,
           maxOutputTokens: 1024,
-          thinkingConfig: { thinkingBudget: THINKING_BUDGET },
+          /*
+           * Not every model will let thinking be switched off: gemini-3.6-flash
+           * answers 400 to a budget of zero, which surfaced as INVALID_ARGUMENT
+           * on every request that fell back to it. The fallback exists so the
+           * user gets an answer at all, not so they get the fastest one, so it
+           * takes the model's own default rather than insisting.
+           */
+          ...(model === MODEL || THINKING_BUDGET > 0
+            ? { thinkingConfig: { thinkingBudget: THINKING_BUDGET } }
+            : {}),
         },
       }),
       signal,
