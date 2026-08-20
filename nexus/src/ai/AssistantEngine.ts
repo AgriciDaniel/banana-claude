@@ -238,6 +238,8 @@ export class AssistantEngine {
         switch (event.type) {
           case 'text': {
             if (!event.text) break;
+            event.text = stripCitations(event.text);
+            if (!event.text) break;
             if (!sawText) {
               sawText = true;
               useAssistantStore.getState().setStatus('streaming');
@@ -433,4 +435,16 @@ export function getAssistant(): AssistantEngine {
 export function disposeAssistant(): void {
   engine?.dispose();
   engine = null;
+}
+
+/**
+ * Grounded answers carry citation markers -- "[1]", "[2, 3]" -- meant for a
+ * page with footnotes. Here the text is SPOKEN, and an assistant that says
+ * "crochet un" at the end of a sentence sounds broken. The sources are
+ * surfaced separately anyway, so the markers are stripped rather than read.
+ */
+const CITATION = /\s*\[\d+(?:\s*,\s*\d+)*\]/g;
+
+export function stripCitations(text: string): string {
+  return text.replace(CITATION, '');
 }

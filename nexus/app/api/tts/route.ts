@@ -48,20 +48,44 @@ export async function POST(request: NextRequest) {
   // multi-megabyte audio request.
   if (text.length > 700) text = text.slice(0, 700);
 
-  const upstream = await fetch(`${API}/${MODEL}:generateContent`, {
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } },
+      },
+    },
+  });
+
+  /*
+   * Speech is requested one sentence at a time, so a single bad roll does not
+   * fail a request -- it silences a sentence in the middle of an answer, and
+   * the user hears the assistant swallow a clause. The model answers a busy
+   * moment with 429 or 503, both of which clear in well under a second, so
+   * they are worth waiting out. Anything else is returned immediately.
+   */
+  const RETRY = new Set([429, 503]);
+  const DELAYS = [350, 900];
+  let upstream = await fetch(`${API}/${MODEL}:generateContent`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text }] }],
-      generationConfig: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } },
-        },
-      },
-    }),
+    body,
     signal: request.signal,
   });
+
+  for (const delay of DELAYS) {
+    if (!RETRY.has(upstream.status) || request.signal.aborted) break;
+    await upstream.body?.cancel().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    if (request.signal.aborted) break;
+    upstream = await fetch(`${API}/${MODEL}:generateContent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      body,
+      signal: request.signal,
+    });
+  }
 
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');

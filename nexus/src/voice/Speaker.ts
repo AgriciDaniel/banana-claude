@@ -129,7 +129,20 @@ export class Speaker {
         if (this.backend === 'gemini') await this.playBuffer(item);
         else await this.playSynth(item.text);
       } catch {
-        // A failed sentence must not strand the queue.
+        /*
+         * The good voice failed for this sentence -- a busy speech model
+         * answers 429 and the route gives up after its retries. Dropping the
+         * sentence made the assistant swallow a clause mid-answer, which reads
+         * as a fault in the assistant rather than in a service. The browser's
+         * own voice is worse, and it is far better than a gap.
+         */
+        if (this.backend === 'gemini' && !this.stopped) {
+          try {
+            await this.playSynth(item.text);
+          } catch {
+            // Neither voice is available; the queue still must not strand.
+          }
+        }
       }
     }
 
