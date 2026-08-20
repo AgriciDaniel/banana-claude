@@ -23,6 +23,10 @@ import { bus } from './bus';
  * probably still looking at it.
  */
 
+/*
+ * Three panels of one answer, laid side by side. Beyond three the row shrinks
+ * past the point where a chart can be read, so the oldest drops off.
+ */
 const DEPTH = 3;
 /** How long a retired frame takes to shrink away, in ms. */
 export const RETIRE_MS = 900;

@@ -2,6 +2,7 @@ import { scanChannels } from './providers/youtube';
 import { findPhoto } from './photo';
 import { findFacts } from './facts';
 import { RateLimited } from './wikimedia';
+import { STATSBOMB_CREDIT, findMatches, matchPlayerStats } from './statsbomb';
 
 /**
  * Tools the SERVER runs, as distinct from commands the interface performs.
@@ -56,6 +57,35 @@ export const SERVER_TOOL_DECLARATIONS = [
         },
       },
       required: ['subject'],
+    },
+  },
+  {
+    name: 'statsbomb_matches',
+    description:
+      "Find matches in StatsBomb's free event data and get their ids. This is the only football source here with REAL numbers -- actual shots with StatsBomb's own xG on each -- rather than figures recalled or searched. Coverage is what StatsBomb chose to open: World Cups, Champions League, La Liga, Bundesliga, Copa America, women's competitions and more, but NOT the current season. Use it whenever a question can be answered from a specific match rather than from current form.",
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        team: { type: 'STRING', description: 'Team name, e.g. "Argentina", "Barcelona".' },
+        competition: { type: 'STRING', description: 'e.g. "FIFA World Cup", "La Liga".' },
+        season: { type: 'STRING', description: 'e.g. "2022", "2018/2019".' },
+      },
+    },
+  },
+  {
+    name: 'statsbomb_match',
+    description:
+      "Every player's line from one match, computed from the event data itself: shots, goals, StatsBomb xG, xA, passes, pass accuracy, key passes, progressive passes and carries, duels won. Get the id from statsbomb_matches first. These are measurements, not estimates - chart them and say so.",
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        matchId: { type: 'NUMBER', description: 'From statsbomb_matches.' },
+        player: {
+          type: 'STRING',
+          description: 'Optional: return only lines whose player name contains this.',
+        },
+      },
+      required: ['matchId'],
     },
   },
   {
@@ -120,6 +150,46 @@ export async function runServerTool(
         })),
         howToRead:
           'viewsPerSubscriber above 0.2 means the channel reaches past its own audience. typicalLengthSeconds and shortsShare describe the format that is working. bestRecentTitles are the actual patterns to study - quote them. Two caveats you must respect: a Short counts a view every time it starts or replays, so view figures from a channel with a high shortsShare are not comparable like-for-like with a long-form channel and you should say so rather than ranking them together silently; and subscriber counts are rounded to three significant figures at source, so treat small differences in the ratio as noise.',
+      };
+    }
+
+    if (name === 'statsbomb_matches') {
+      const matches = await findMatches(
+        {
+          team: typeof args.team === 'string' ? args.team : undefined,
+          competition: typeof args.competition === 'string' ? args.competition : undefined,
+          season: typeof args.season === 'string' ? args.season : undefined,
+        },
+        signal,
+      );
+      if (matches.length === 0) {
+        return {
+          ok: true,
+          matches: [],
+          note: 'Nothing in the open data matches that. Coverage is selected competitions, never the current season - say which and offer what is there.',
+        };
+      }
+      return { ok: true, matches, source: STATSBOMB_CREDIT };
+    }
+
+    if (name === 'statsbomb_match') {
+      const matchId = Number(args.matchId);
+      if (!Number.isFinite(matchId)) return { ok: false, error: 'a numeric matchId is required' };
+
+      const result = await matchPlayerStats(matchId, signal);
+      if (!result) return { ok: false, error: `No event data for match ${matchId}` };
+
+      const wanted = typeof args.player === 'string' ? args.player.toLowerCase() : null;
+      const players = wanted
+        ? result.players.filter((p) => p.player.toLowerCase().includes(wanted))
+        : result.players.slice(0, 14);
+
+      return {
+        ok: true,
+        matchId,
+        players,
+        source: STATSBOMB_CREDIT,
+        note: "These are measured from the match events, not modelled by you: xg is the figure StatsBomb attached to each shot, and xa is the expected value of the shots each pass created. Cite the source - attribution is a licence condition, and the data is non-commercial.",
       };
     }
 

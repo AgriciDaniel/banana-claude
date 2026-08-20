@@ -8,7 +8,7 @@ import { useMediaStore } from '@/stores/useMediaStore';
 import { useCarouselStore } from '@/stores/useCarouselStore';
 import { Spring, Spring3 } from '@/animation/Spring';
 import { SPRINGS } from '@/animation/presets';
-import { MediaFrame } from './MediaFrame';
+import { MediaFrame, frameSize } from './MediaFrame';
 import type { MediaItem } from '@/media/types';
 
 /**
@@ -27,27 +27,58 @@ import type { MediaItem } from '@/media/types';
 const STAGE_Y = 0.5;
 
 /**
- * Where a frame sits when two belong together.
+ * Where each panel sits when an answer is told in several.
  *
- * A photograph and the factsheet that explains it are one answer in two
- * pieces, and stacking them buried the picture completely behind an opaque
- * panel. When the current topic holds exactly a visual and a chart, they stand
- * side by side instead -- picture on the left, reading matter on the right,
- * which is the order they are looked at in.
+ * Stacking was right when a second panel replaced the first, and wrong the
+ * moment they became complementary: a photograph, the factsheet that explains
+ * it and the radar that measures it are one answer in three pieces, and an
+ * opaque panel in front of the other two buries the answer it belongs to.
+ *
+ * Everything from the current question therefore stands in a row. Each place
+ * is measured from the panels' own widths, so a tall portrait beside two wide
+ * charts still comes out evenly spaced, and the row shrinks as a whole until
+ * it fits rather than letting any one panel run off the side.
  */
-function pairSide(stack: MediaItem[], index: number): 'left' | 'right' | null {
-  if (stack.length !== 2) return null;
-  const kinds = stack.map((m) => m.kind);
-  const visual = kinds.findIndex((k) => k === 'image' || k === 'video');
-  const chart = kinds.findIndex((k) => k === 'chart');
-  if (visual === -1 || chart === -1) return null;
-  return index === visual ? 'left' : 'right';
+/*
+ * Measured against what the camera actually shows at the stage's distance,
+ * not guessed from the panel widths: the first estimate ran a three-panel row
+ * off both edges of the screen.
+ */
+const ROW_WIDTH = 4.2;
+const ROW_GAP = 0.16;
+
+function rowPlaces(stack: MediaItem[]): Array<{ x: number; scale: number }> | null {
+  if (stack.length < 2) return null;
+
+  /*
+   * The stack is newest first; a row laid out in that order reads backwards.
+   * Reversed here so panels appear left to right in the order they arrived,
+   * which is the order they were meant to be read in -- the photograph, then
+   * what it is, then what it measures.
+   */
+  const ordered = [...stack].reverse();
+  const sizes = ordered.map((item) => frameSize(item).width);
+  const total = sizes.reduce((sum, w) => sum + w, 0) + ROW_GAP * (stack.length - 1);
+  const scale = Math.min(1, ROW_WIDTH / total);
+
+  // Laid out left to right in the order they arrived, which is the order they
+  // were meant to be read in.
+  let cursor = -(total * scale) / 2;
+  const placed = sizes.map((width) => {
+    const w = width * scale;
+    const x = cursor + w / 2;
+    cursor += w + ROW_GAP * scale;
+    return { x, scale };
+  });
+  // Handed back in stack order, so the caller can index by it directly.
+  return placed.reverse();
 }
 
 export function MediaStage() {
   const group = useRef<Group>(null);
   const stack = useMediaStore((s) => s.stack);
   const retiring = useMediaStore((s) => s.retiring);
+  const places = useMemo(() => rowPlaces(stack), [stack]);
   const expandedId = useCarouselStore((s) => s.expandedId);
 
   const motion = useMemo(
@@ -93,7 +124,7 @@ export function MediaStage() {
   return (
     <group ref={group} name="media-stage">
       {stack.map((item, index) => (
-        <MediaFrame key={item.id} item={item} index={index} pairSide={pairSide(stack, index)} />
+        <MediaFrame key={item.id} item={item} index={index} row={places?.[index] ?? null} />
       ))}
 
       {/* On their way out: behind everything, shrinking, not interactive. */}

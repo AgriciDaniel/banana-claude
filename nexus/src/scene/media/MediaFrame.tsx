@@ -50,27 +50,38 @@ const WIDTH = 2.5;
 const MAX_HEIGHT = 1.8;
 /** Depth offsets for the stack behind the focused frame. */
 const STEP = 0.34;
-/** How far a pair shrinks to make room for each other. */
-const PAIR_SCALE = 0.82;
 
 /** A chart is painted at 1024x640, so it always hangs in that proportion. */
 const CHART_ASPECT = 1024 / 640;
+
+/**
+ * How large a frame hangs, before any layout scaling.
+ *
+ * Exported because the stage has to know the widths to lay several panels in a
+ * row, and it cannot ask the frames -- they are the things being placed.
+ */
+export function frameSize(item: MediaItem): { width: number; height: number } {
+  const aspect = item.kind === 'chart' ? CHART_ASPECT : (item.aspect ?? 1);
+  const safe = Math.max(0.4, Math.min(3, aspect));
+  const height = Math.min(WIDTH / safe, MAX_HEIGHT);
+  return { width: height * safe, height };
+}
 
 export function MediaFrame({
   item,
   index,
   retiring = false,
-  pairSide = null,
+  row = null,
 }: {
   item: MediaItem;
   index: number;
   /** Belongs to a finished topic: shrink away rather than linger behind. */
   retiring?: boolean;
   /**
-   * Half of a two-piece answer -- a photograph and the factsheet that explains
-   * it. Set, the frame takes its side rather than its place in the stack.
+   * One panel of an answer told in several. Set, the frame takes the place the
+   * stage worked out for it rather than its position in the stack.
    */
-  pairSide?: 'left' | 'right' | null;
+  row?: { x: number; scale: number } | null;
 }) {
   const group = useRef<Group>(null);
   const plane = useRef<Mesh>(null);
@@ -89,7 +100,7 @@ export function MediaFrame({
    * as being about the current question.
    */
   const stale = !retiring && item.topic !== currentTopic;
-  const focused = index === 0 && !retiring && !stale;
+  const focused = (index === 0 || row !== null) && !retiring && !stale;
 
   /*
    * Charts draw themselves, so they need no loader -- but they do need to grow
@@ -228,15 +239,10 @@ export function MediaFrame({
       motion.position.set(-1.95 - index * 0.22, -0.62 - index * 0.1, -0.55 - index * STEP);
       motion.scale.set(0.46 - index * 0.04);
       motion.opacity.set(0.26 - index * 0.07);
-    } else if (pairSide) {
-      /*
-       * Placed by its own edge rather than by a fixed offset, so a tall
-       * portrait and a wide chart still meet in the middle with an even gap
-       * between them whatever their proportions.
-       */
-      const half = (width * PAIR_SCALE) / 2;
-      motion.position.set(pairSide === 'left' ? -(half + 0.09) : half + 0.09, 0, 0);
-      motion.scale.set(PAIR_SCALE);
+    } else if (row) {
+      // The stage measured the whole row and handed back this panel's place.
+      motion.position.set(row.x, 0, 0);
+      motion.scale.set(row.scale);
       motion.opacity.set(1);
     } else {
       motion.position.set(index * 0.42, -index * 0.12, -index * STEP);
@@ -304,7 +310,7 @@ export function MediaFrame({
         * another, reduced, or already leaving would be aiming at a target
         * that moves.
         */}
-      {(focused || pairSide !== null) && !retiring && (
+      {(focused || row !== null) && !retiring && (
         <mesh
           name="media-close"
           position={[width / 2 - 0.11, height / 2 - 0.11, 0.03]}
