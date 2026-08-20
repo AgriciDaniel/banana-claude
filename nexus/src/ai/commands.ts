@@ -34,6 +34,27 @@ import { summariseFeed } from '@/modules/summary';
  * they are not two implementations of the same idea, they are one.
  */
 
+/**
+ * Every chart form, in one place.
+ *
+ * It was written out twice -- once in the declaration the model reads, once in
+ * the guard that validates what comes back -- and the two drifted: `heatmap`
+ * was offered to the model and silently rejected on arrival, falling back to a
+ * bar chart with nothing to plot. One list cannot disagree with itself.
+ */
+const CHART_KINDS = [
+  'bar',
+  'line',
+  'donut',
+  'kpi',
+  'funnel',
+  'flow',
+  'playbook',
+  'plan',
+  'profile',
+  'heatmap',
+] as const;
+
 /** Function declarations sent to Gemini. Kept small - verbs, not sentences. */
 export const COMMAND_DECLARATIONS = [
   {
@@ -126,9 +147,9 @@ export const COMMAND_DECLARATIONS = [
       properties: {
         kind: {
           type: 'STRING',
-          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan', 'profile'],
+          enum: [...CHART_KINDS],
           description:
-            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps. plan for an action plan: each point is one action, its value is the week it happens in, and "target" says which number should move and how far. profile is the factsheet that belongs beside a photograph: "facts" carries what characterises the subject and "steps" its honours or milestones.',
+            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps. plan for an action plan: each point is one action, its value is the week it happens in, and "target" says which number should move and how far. profile is the factsheet that belongs beside a photograph: "facts" carries what characterises the subject and "steps" its honours or milestones. heatmap compares several subjects across several metrics at once via "matrix" - and when you pass "matrix.expected", cells are shaded by the gap to expectation instead of by rank, which is the whole point of expected-goals style metrics.',
         },
         title: { type: 'STRING', description: 'The claim the chart makes, in a few words.' },
         source: {
@@ -182,6 +203,37 @@ export const COMMAND_DECLARATIONS = [
           description:
             'profile only: up to three limits or weak points, judged as fairly as the strengths. A profile with only strengths is advertising.',
           items: { type: 'STRING' },
+        },
+        matrix: {
+          type: 'OBJECT',
+          description:
+            'heatmap only: up to six subjects measured on up to six metrics. Pass "expected" whenever a modelled expectation exists (xG, xA, expected reach, forecast revenue) - the gap is more informative than the raw figure and the panel colours it warm above and cool below.',
+          properties: {
+            columns: {
+              type: 'ARRAY',
+              description: 'Metric names, short: "Buts", "xG", "Passes cles", "xA".',
+              items: { type: 'STRING' },
+            },
+            rows: {
+              type: 'ARRAY',
+              description: 'One entry per subject compared.',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  label: { type: 'STRING' },
+                  values: { type: 'ARRAY', items: { type: 'NUMBER' } },
+                  mine: { type: 'BOOLEAN', description: "The user's own subject." },
+                },
+                required: ['label', 'values'],
+              },
+            },
+            expected: {
+              type: 'ARRAY',
+              description: 'One expected value per column, in the same order.',
+              items: { type: 'NUMBER' },
+            },
+          },
+          required: ['columns', 'rows'],
         },
         target: {
           type: 'OBJECT',
@@ -397,7 +449,9 @@ export function executeCommand(call: CommandCall): CommandResult {
        */
       // These kinds carry text, not quantities: their points would be dropped
       // by a numeric filter that has nothing to filter.
-      const stepsOnly = ['flow', 'playbook', 'plan', 'profile'].includes(String(call.args.kind));
+      const stepsOnly = ['flow', 'playbook', 'plan', 'profile', 'heatmap'].includes(
+        String(call.args.kind),
+      );
       const points = raw
         .map((p) => p as { label?: unknown; value?: unknown; mine?: unknown })
         .filter((p) => stepsOnly || (typeof p.value === 'number' && Number.isFinite(p.value)))
@@ -412,8 +466,10 @@ export function executeCommand(call: CommandCall): CommandResult {
        * so demanding one silently refused every factsheet the model tried to
        * draw. Each kind is asked for what it actually carries.
        */
+      const matrix = readMatrix(call.args.matrix);
       const hasContent =
         points.length > 0 ||
+        (call.args.kind === 'heatmap' && matrix !== undefined) ||
         (call.args.kind === 'profile' &&
           (Array.isArray(call.args.facts) ||
             Array.isArray(call.args.steps) ||
@@ -426,9 +482,7 @@ export function executeCommand(call: CommandCall): CommandResult {
       }
       const kind = String(call.args.kind ?? 'bar') as ChartSpec['kind'];
       const spec: ChartSpec = {
-        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan', 'profile'].includes(
-          kind,
-        )
+        kind: (CHART_KINDS as readonly string[]).includes(kind)
           ? kind
           : 'bar',
         title: String(call.args.title ?? '').slice(0, 90) || 'Sans titre',
@@ -446,6 +500,7 @@ export function executeCommand(call: CommandCall): CommandResult {
         note: typeof call.args.note === 'string' ? call.args.note.slice(0, 160) : undefined,
         target: readTarget(call.args.target),
         facts: readFacts(call.args.facts),
+        matrix,
         strengths: readLines(call.args.strengths),
         weaknesses: readLines(call.args.weaknesses),
         steps: Array.isArray(call.args.steps)
@@ -585,4 +640,45 @@ function readLines(raw: unknown, max = 3): string[] | undefined {
     .slice(0, max)
     .map((entry) => String(entry).slice(0, 110));
   return lines.length > 0 ? lines : undefined;
+}
+
+/** A heatmap's grid, kept only when the rows genuinely line up with the columns. */
+function readMatrix(raw: unknown): ChartSpec['matrix'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const source = raw as { columns?: unknown; rows?: unknown; expected?: unknown };
+  if (!Array.isArray(source.columns) || !Array.isArray(source.rows)) return undefined;
+
+  const columns = source.columns
+    .filter((c) => typeof c === 'string')
+    .slice(0, 6)
+    .map((c) => String(c).slice(0, 18));
+  if (columns.length === 0) return undefined;
+
+  const rows = source.rows
+    .map((entry) => entry as { label?: unknown; values?: unknown; mine?: unknown })
+    .filter((entry) => typeof entry.label === 'string' && Array.isArray(entry.values))
+    .slice(0, 6)
+    .map((entry) => ({
+      label: String(entry.label).slice(0, 34),
+      /*
+       * Padded to the column count rather than dropped when short. A row one
+       * value shy would otherwise disappear from the comparison entirely,
+       * which is a strange way to report an incomplete figure.
+       */
+      values: columns.map((_, i) => {
+        const value = (entry.values as unknown[])[i];
+        return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+      }),
+      mine: entry.mine === true,
+    }));
+  if (rows.length === 0) return undefined;
+
+  const expected = Array.isArray(source.expected)
+    ? columns.map((_, i) => {
+        const value = (source.expected as unknown[])[i];
+        return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+      })
+    : undefined;
+
+  return { columns, rows, expected };
 }

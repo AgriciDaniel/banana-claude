@@ -55,7 +55,8 @@ export type ChartKind =
   | 'flow'
   | 'playbook'
   | 'plan'
-  | 'profile';
+  | 'profile'
+  | 'heatmap';
 
 export interface ChartPoint {
   label: string;
@@ -106,6 +107,21 @@ export interface ChartSpec {
    */
   strengths?: string[];
   weaknesses?: string[];
+  /**
+   * Heatmap only: several subjects measured on several metrics at once.
+   *
+   * `expected` is the reason this form exists. A raw figure says what
+   * happened; the same figure against what a model expected says whether it
+   * was earned or borrowed, and that gap is the whole point of the
+   * expected-goals family of metrics. When it is supplied, cells are coloured
+   * by the distance from expectation rather than by rank -- so a striker
+   * scoring nine on an expected four reads as luck running out, not as form.
+   */
+  matrix?: {
+    columns: string[];
+    rows: Array<{ label: string; values: number[]; mine?: boolean }>;
+    expected?: number[];
+  };
 }
 
 export interface MediaItem {

@@ -76,6 +76,7 @@ function paint(spec: ChartSpec, reveal: number): Texture {
   else if (spec.kind === 'playbook') playbook(ctx, spec, plot, reveal);
   else if (spec.kind === 'plan') plan(ctx, spec, plot, reveal);
   else if (spec.kind === 'profile') profile(ctx, spec, plot, reveal);
+  else if (spec.kind === 'heatmap') heatmap(ctx, spec, plot, reveal);
   else kpi(ctx, spec, plot, reveal);
 
   const texture = new CanvasTexture(canvas);
@@ -838,4 +839,110 @@ function assessment(
       ctx.globalAlpha = 1;
     });
   }
+}
+
+/**
+ * A comparative heatmap: several subjects, several metrics, one glance.
+ *
+ * Two colourings, and the choice between them is the substance of the form.
+ *
+ * Without `expected`, a cell is shaded by where it sits in its own column --
+ * a ranking, useful for "who leads on what".
+ *
+ * With `expected`, it is shaded by the DISTANCE from what was expected, warm
+ * above and cool below. That is the reading the expected-goals family exists
+ * to support: nine goals on four expected is not form, it is a finishing run
+ * that regresses; four on nine is a striker being failed by his luck, not by
+ * his movement. The raw number cannot tell those apart and the gap always can.
+ */
+function heatmap(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal: number) {
+  const matrix = spec.matrix;
+  if (!matrix || matrix.rows.length === 0 || matrix.columns.length === 0) return;
+
+  const columns = matrix.columns.slice(0, 6);
+  const rows = matrix.rows.slice(0, 6);
+  const expected = matrix.expected;
+
+  // Wide enough for a full name: "Ousmane Dembélé" was arriving as
+  // "Ousmane Dem...", which is a poor way to label a comparison.
+  const labelW = 232;
+  const gridX = plot.x + labelW;
+  const gridW = plot.w - labelW;
+  const cellW = gridW / columns.length;
+  const headerH = 40;
+  const cellH = Math.min(58, (plot.h - headerH) / rows.length);
+
+  // Column maxima, for the ranking colouring and for nothing else.
+  const maxima = columns.map((_, c) =>
+    Math.max(...rows.map((row) => Math.abs(row.values[c] ?? 0)), 1e-6),
+  );
+
+  ctx.fillStyle = PALETTE.ghost;
+  ctx.font = `600 16px ${MONO}`;
+  columns.forEach((name, c) => {
+    const text = clip(ctx, name.toUpperCase(), cellW - 10);
+    const w = ctx.measureText(text).width;
+    ctx.fillText(text, gridX + c * cellW + (cellW - w) / 2, plot.y + 6);
+  });
+
+  if (expected) {
+    ctx.fillStyle = PALETTE.ghost;
+    ctx.font = `500 15px ${MONO}`;
+    columns.forEach((_, c) => {
+      const value = expected[c];
+      if (value === undefined) return;
+      const text = `att. ${format(value)}`;
+      const w = ctx.measureText(text).width;
+      ctx.fillText(text, gridX + c * cellW + (cellW - w) / 2, plot.y + 26);
+    });
+  }
+
+  rows.forEach((row, r) => {
+    const shown = Math.min(1, Math.max(0, reveal * rows.length - r));
+    if (shown <= 0) return;
+    ctx.globalAlpha = shown;
+    const y = plot.y + headerH + r * cellH;
+
+    ctx.fillStyle = row.mine ? PALETTE.lumen : PALETTE.ghost;
+    ctx.font = `${row.mine ? 600 : 500} 20px ${SANS}`;
+    ctx.fillText(clip(ctx, row.label, labelW - 18), plot.x, y + cellH / 2 + 7);
+
+    columns.forEach((_, c) => {
+      const value = row.values[c];
+      const x = gridX + c * cellW;
+      if (value === undefined) return;
+
+      ctx.fillStyle = cellColour(value, expected?.[c], maxima[c]!);
+      ctx.fillRect(x + 2, y + 2, cellW - 4, cellH - 4);
+
+      if (row.mine) {
+        ctx.strokeStyle = PALETTE.signal;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x + 2, y + 2, cellW - 4, cellH - 4);
+      }
+
+      ctx.fillStyle = PALETTE.lumen;
+      ctx.font = `600 21px ${MONO}`;
+      const text = format(value, spec.unit);
+      const w = ctx.measureText(text).width;
+      ctx.fillText(text, x + (cellW - w) / 2, y + cellH / 2 + 8);
+    });
+    ctx.globalAlpha = 1;
+  });
+}
+
+/**
+ * Warm when a figure beats what was expected of it, cool when it falls short,
+ * and a plain ramp when there is nothing to expect it against.
+ */
+function cellColour(value: number, expected: number | undefined, max: number): string {
+  if (expected === undefined || expected === 0) {
+    const t = Math.min(1, Math.abs(value) / max);
+    return `rgba(99,201,255,${0.08 + t * 0.42})`;
+  }
+  const gap = (value - expected) / Math.abs(expected);
+  const t = Math.min(1, Math.abs(gap) / 0.6);
+  return gap >= 0
+    ? `rgba(79,224,196,${0.1 + t * 0.45})`
+    : `rgba(255,122,47,${0.1 + t * 0.45})`;
 }
