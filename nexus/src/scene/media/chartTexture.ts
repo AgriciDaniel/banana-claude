@@ -77,6 +77,8 @@ function paint(spec: ChartSpec, reveal: number): Texture {
   else if (spec.kind === 'plan') plan(ctx, spec, plot, reveal);
   else if (spec.kind === 'profile') profile(ctx, spec, plot, reveal);
   else if (spec.kind === 'heatmap') heatmap(ctx, spec, plot, reveal);
+  else if (spec.kind === 'radar') radar(ctx, spec, plot, reveal);
+  else if (spec.kind === 'scatter') scatter(ctx, spec, plot, reveal);
   else kpi(ctx, spec, plot, reveal);
 
   const texture = new CanvasTexture(canvas);
@@ -129,7 +131,8 @@ function footer(ctx: CanvasRenderingContext2D, spec: ChartSpec): number {
     y -= 36;
   }
 
-  if (spec.note) {
+  // The radar places its note in its own left column, beside the dial.
+  if (spec.note && spec.kind !== 'radar') {
     ctx.font = `600 23px ${SANS}`;
     const lines = wrap(ctx, spec.note, W - PAD * 2 - 34).slice(0, 2);
     ctx.fillStyle = PALETTE.lock;
@@ -945,4 +948,219 @@ function cellColour(value: number, expected: number | undefined, max: number): s
   return gap >= 0
     ? `rgba(79,224,196,${0.1 + t * 0.45})`
     : `rgba(255,122,47,${0.1 + t * 0.45})`;
+}
+
+/** What each family of metrics is coloured with, as the analytics sites do. */
+const RADAR_GROUPS: Record<string, string> = {
+  attacking: '#3E63DD',
+  possession: '#8B5CF6',
+  defending: '#E5484D',
+};
+
+/**
+ * A percentile radar -- the "pizza" the football analytics sites settled on.
+ *
+ * Every wedge runs from the centre to a radius set by the percentile, so the
+ * silhouette is the player: a blue fan on one flank and a red stub on the
+ * other is an attacker who does not defend, readable before a number is.
+ *
+ * Percentiles rather than raw values, because that is what makes metrics in
+ * different units comparable on one dial. Three key passes means nothing; the
+ * ninety-ninth percentile for key passes is a sentence.
+ */
+function radar(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal: number) {
+  const data = spec.radar;
+  if (!data || data.slices.length === 0) return;
+
+  const slices = data.slices.slice(0, 12);
+  /*
+   * The dial is sized against the whole panel rather than the plot box. A
+   * round figure in a wide letterbox is limited by height, and obeying the
+   * plot left it cramped in the middle of an empty panel; drawn from the
+   * panel it can be half as big again. Set right of centre so the note and
+   * the source keep the bottom-left corner the circle never reaches.
+   */
+  const cx = plot.x + plot.w * 0.72;
+  const cy = H / 2 + 18;
+  const radius = Math.min(plot.w * 0.21, H / 2 - 118);
+  if (radius <= 20) return;
+
+  /*
+   * The reading goes in the column the circle leaves free on the left. Drawn
+   * here rather than by the shared footer because the footer spans the full
+   * width, and at this size that ran the sentence straight through the dial.
+   */
+  if (spec.note) {
+    const columnW = cx - radius - 42 - plot.x - 24;
+    if (columnW > 150) {
+      ctx.font = `600 22px ${SANS}`;
+      const lines = wrap(ctx, spec.note, columnW).slice(0, 5);
+      const top = cy - (lines.length - 1) * 15;
+      ctx.fillStyle = PALETTE.lock;
+      lines.forEach((text, i) => ctx.fillText(text, plot.x + 24, top + i * 30));
+      ctx.beginPath();
+      ctx.moveTo(plot.x + 2, top - 12);
+      ctx.lineTo(plot.x + 16, top - 4);
+      ctx.lineTo(plot.x + 2, top + 4);
+      ctx.fill();
+    }
+  }
+
+  // Rings, so a percentile can be read off the dial rather than guessed.
+  ctx.strokeStyle = 'rgba(99,201,255,0.14)';
+  ctx.lineWidth = 1;
+  for (const fraction of [0.25, 0.5, 0.75, 1]) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * fraction, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  const step = (Math.PI * 2) / slices.length;
+
+  slices.forEach((slice, i) => {
+    const shown = Math.min(1, Math.max(0, reveal * 1.6 - i * 0.05));
+    if (shown <= 0) return;
+
+    const pct = Math.max(0, Math.min(100, slice.percentile));
+    const r = radius * (pct / 100) * shown;
+    // Start at the top and run clockwise, which is how they are read.
+    const from = -Math.PI / 2 + i * step;
+    const to = from + step * 0.9;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, from, to);
+    ctx.closePath();
+    ctx.fillStyle = RADAR_GROUPS[slice.group ?? 'attacking'] ?? RADAR_GROUPS.attacking!;
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(3,6,11,0.9)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const mid = (from + to) / 2;
+
+    // The percentile, just inside the wedge tip where it belongs.
+    if (r > 34) {
+      ctx.fillStyle = PALETTE.lumen;
+      ctx.font = `600 17px ${MONO}`;
+      const text = String(Math.round(pct));
+      const w = ctx.measureText(text).width;
+      ctx.fillText(text, cx + Math.cos(mid) * (r - 20) - w / 2, cy + Math.sin(mid) * (r - 20) + 6);
+    }
+
+    ctx.fillStyle = PALETTE.ghost;
+    ctx.font = `500 16px ${SANS}`;
+    const label = clip(ctx, slice.label, 150);
+    const lw = ctx.measureText(label).width;
+    const lx = cx + Math.cos(mid) * (radius + 26);
+    const ly = cy + Math.sin(mid) * (radius + 26);
+    // Push the text away from the dial rather than centring it on the point,
+    // so labels on the flanks do not sit on top of their own wedge.
+    ctx.fillText(label, lx - (Math.cos(mid) < -0.2 ? lw : Math.cos(mid) > 0.2 ? 0 : lw / 2), ly + 5);
+  });
+
+  if (!data.reference) return;
+  ctx.fillStyle = PALETTE.ghost;
+  ctx.font = `500 17px ${MONO}`;
+  ctx.fillText(clip(ctx, data.reference.toUpperCase(), plot.w), plot.x, plot.y - 6);
+}
+
+/**
+ * A scatter: two metrics across a population, which is how an outlier stops
+ * being an assertion and becomes a position on a page.
+ *
+ * The medians matter more than the axes. They cut the plot into quadrants, and
+ * everything interesting is far from both -- high on one and low on the other
+ * is a specialist, high on both is a problem for whoever has to mark them.
+ */
+function scatter(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal: number) {
+  const data = spec.scatter;
+  if (!data || data.points.length === 0) return;
+
+  const pad = { left: 62, bottom: 44, right: 16, top: 12 };
+  const box = {
+    x: plot.x + pad.left,
+    y: plot.y + pad.top,
+    w: plot.w - pad.left - pad.right,
+    h: plot.h - pad.top - pad.bottom,
+  };
+  if (box.w <= 40 || box.h <= 40) return;
+
+  const xs = data.points.map((p) => p.x);
+  const ys = data.points.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+
+  const px = (v: number) => box.x + ((v - minX) / spanX) * box.w;
+  const py = (v: number) => box.y + box.h - ((v - minY) / spanY) * box.h;
+
+  ctx.strokeStyle = 'rgba(99,201,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+  for (const [value, horizontal] of [
+    [data.medianX, false],
+    [data.medianY, true],
+  ] as Array<[number | undefined, boolean]>) {
+    if (value === undefined) continue;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(232,243,255,0.28)';
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    if (horizontal) {
+      ctx.moveTo(box.x, py(value));
+      ctx.lineTo(box.x + box.w, py(value));
+    } else {
+      ctx.moveTo(px(value), box.y);
+      ctx.lineTo(px(value), box.y + box.h);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  data.points.slice(0, 400).forEach((point, i) => {
+    const shown = Math.min(1, Math.max(0, reveal * 2 - i / 400));
+    if (shown <= 0) return;
+    const x = px(point.x);
+    const y = py(point.y);
+
+    ctx.globalAlpha = shown * (point.mine || point.label ? 1 : 0.45);
+    ctx.beginPath();
+    ctx.arc(x, y, point.mine ? 9 : point.label ? 7 : 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = point.mine ? PALETTE.signal : point.label ? PALETTE.core : 'rgba(99,201,255,0.5)';
+    ctx.fill();
+
+    if (point.mine) {
+      ctx.strokeStyle = PALETTE.lumen;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    if (point.label) {
+      ctx.fillStyle = point.mine ? PALETTE.lumen : PALETTE.ghost;
+      ctx.font = `${point.mine ? 600 : 500} 17px ${SANS}`;
+      // Flip the label inward near the right edge so it stays on the panel.
+      const w = ctx.measureText(point.label).width;
+      const right = x + 14 + w > box.x + box.w;
+      ctx.fillText(point.label, right ? x - 14 - w : x + 14, y + 6);
+    }
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.fillStyle = PALETTE.ghost;
+  ctx.font = `500 17px ${MONO}`;
+  const xLabel = clip(ctx, data.xLabel.toUpperCase(), box.w);
+  ctx.fillText(xLabel, box.x + box.w - ctx.measureText(xLabel).width, box.y + box.h + 32);
+
+  ctx.save();
+  ctx.translate(plot.x + 18, box.y + 4);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(clip(ctx, data.yLabel.toUpperCase(), box.h), -box.h, 0);
+  ctx.restore();
 }

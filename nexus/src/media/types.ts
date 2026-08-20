@@ -56,7 +56,9 @@ export type ChartKind =
   | 'playbook'
   | 'plan'
   | 'profile'
-  | 'heatmap';
+  | 'heatmap'
+  | 'radar'
+  | 'scatter';
 
 export interface ChartPoint {
   label: string;
@@ -121,6 +123,41 @@ export interface ChartSpec {
     columns: string[];
     rows: Array<{ label: string; values: number[]; mine?: boolean }>;
     expected?: number[];
+  };
+  /**
+   * Radar only: one subject against its peer group, metric by metric.
+   *
+   * Values are PERCENTILES, not raw figures, which is the whole trick. Three
+   * key passes means nothing on its own; being in the ninety-ninth percentile
+   * of midfielders for key passes is a sentence. It also makes metrics in
+   * different units directly comparable on one dial, which raw values never
+   * are.
+   *
+   * Grouping colours the wedges by what they measure, so the shape of a player
+   * is readable before a single number is: a blue fan on one side and a red
+   * stub on the other is an attacker who does not defend.
+   */
+  radar?: {
+    subject: string;
+    /** The peer group the percentiles are against. Never omit it. */
+    reference?: string;
+    slices: Array<{
+      label: string;
+      percentile: number;
+      group?: 'attacking' | 'possession' | 'defending';
+    }>;
+  };
+  /**
+   * Scatter only: two metrics against each other across a population, which
+   * is how an outlier becomes visible. The medians draw the quadrants -- the
+   * interesting subjects are the ones far from both.
+   */
+  scatter?: {
+    xLabel: string;
+    yLabel: string;
+    points: Array<{ label?: string; x: number; y: number; mine?: boolean }>;
+    medianX?: number;
+    medianY?: number;
   };
 }
 

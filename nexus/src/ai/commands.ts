@@ -53,6 +53,8 @@ const CHART_KINDS = [
   'plan',
   'profile',
   'heatmap',
+  'radar',
+  'scatter',
 ] as const;
 
 /** Function declarations sent to Gemini. Kept small - verbs, not sentences. */
@@ -149,7 +151,7 @@ export const COMMAND_DECLARATIONS = [
           type: 'STRING',
           enum: [...CHART_KINDS],
           description:
-            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps. plan for an action plan: each point is one action, its value is the week it happens in, and "target" says which number should move and how far. profile is the factsheet that belongs beside a photograph: "facts" carries what characterises the subject and "steps" its honours or milestones. heatmap compares several subjects across several metrics at once via "matrix" - and when you pass "matrix.expected", cells are shaded by the gap to expectation instead of by rank, which is the whole point of expected-goals style metrics.',
+            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps. plan for an action plan: each point is one action, its value is the week it happens in, and "target" says which number should move and how far. profile is the factsheet that belongs beside a photograph: "facts" carries what characterises the subject and "steps" its honours or milestones. heatmap compares several subjects across several metrics at once via "matrix" - and when you pass "matrix.expected", cells are shaded by the gap to expectation instead of by rank. radar is the percentile pizza the analytics sites use: ONE subject against its peer group, every value a percentile from 0 to 100, wedges coloured by what they measure. scatter puts two metrics against each other across a whole population so an outlier can be seen rather than asserted.',
         },
         title: { type: 'STRING', description: 'The claim the chart makes, in a few words.' },
         source: {
@@ -203,6 +205,61 @@ export const COMMAND_DECLARATIONS = [
           description:
             'profile only: up to three limits or weak points, judged as fairly as the strengths. A profile with only strengths is advertising.',
           items: { type: 'STRING' },
+        },
+        radar: {
+          type: 'OBJECT',
+          description:
+            'radar only: one subject against its peers. Values MUST be percentiles from 0 to 100, never raw figures - that is what makes metrics in different units comparable on one dial. Always fill "reference" with the peer group they are percentiles of.',
+          properties: {
+            subject: { type: 'STRING', description: 'e.g. "R. Rios (Palmeiras, 25)".' },
+            reference: {
+              type: 'STRING',
+              description: 'The comparison group: "vs milieux, toutes ligues, par 90".',
+            },
+            slices: {
+              type: 'ARRAY',
+              description: 'Six to twelve metrics.',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  label: { type: 'STRING' },
+                  percentile: { type: 'NUMBER', description: '0 to 100.' },
+                  group: {
+                    type: 'STRING',
+                    enum: ['attacking', 'possession', 'defending'],
+                    description: 'What the metric measures, which sets its colour.',
+                  },
+                },
+                required: ['label', 'percentile'],
+              },
+            },
+          },
+          required: ['subject', 'slices'],
+        },
+        scatter: {
+          type: 'OBJECT',
+          description:
+            'scatter only: two metrics across a population. Label only the handful of points worth naming and leave the rest unlabelled as context - the crowd is what makes an outlier visible. Pass the medians so the quadrants show.',
+          properties: {
+            xLabel: { type: 'STRING' },
+            yLabel: { type: 'STRING' },
+            medianX: { type: 'NUMBER' },
+            medianY: { type: 'NUMBER' },
+            points: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  label: { type: 'STRING', description: 'Omit for background points.' },
+                  x: { type: 'NUMBER' },
+                  y: { type: 'NUMBER' },
+                  mine: { type: 'BOOLEAN' },
+                },
+                required: ['x', 'y'],
+              },
+            },
+          },
+          required: ['xLabel', 'yLabel', 'points'],
         },
         matrix: {
           type: 'OBJECT',
@@ -449,9 +506,15 @@ export function executeCommand(call: CommandCall): CommandResult {
        */
       // These kinds carry text, not quantities: their points would be dropped
       // by a numeric filter that has nothing to filter.
-      const stepsOnly = ['flow', 'playbook', 'plan', 'profile', 'heatmap'].includes(
-        String(call.args.kind),
-      );
+      const stepsOnly = [
+        'flow',
+        'playbook',
+        'plan',
+        'profile',
+        'heatmap',
+        'radar',
+        'scatter',
+      ].includes(String(call.args.kind));
       const points = raw
         .map((p) => p as { label?: unknown; value?: unknown; mine?: unknown })
         .filter((p) => stepsOnly || (typeof p.value === 'number' && Number.isFinite(p.value)))
@@ -467,9 +530,13 @@ export function executeCommand(call: CommandCall): CommandResult {
        * draw. Each kind is asked for what it actually carries.
        */
       const matrix = readMatrix(call.args.matrix);
+      const radarSpec = readRadar(call.args.radar);
+      const scatterSpec = readScatter(call.args.scatter);
       const hasContent =
         points.length > 0 ||
         (call.args.kind === 'heatmap' && matrix !== undefined) ||
+        (call.args.kind === 'radar' && radarSpec !== undefined) ||
+        (call.args.kind === 'scatter' && scatterSpec !== undefined) ||
         (call.args.kind === 'profile' &&
           (Array.isArray(call.args.facts) ||
             Array.isArray(call.args.steps) ||
@@ -501,6 +568,8 @@ export function executeCommand(call: CommandCall): CommandResult {
         target: readTarget(call.args.target),
         facts: readFacts(call.args.facts),
         matrix,
+        radar: radarSpec,
+        scatter: scatterSpec,
         strengths: readLines(call.args.strengths),
         weaknesses: readLines(call.args.weaknesses),
         steps: Array.isArray(call.args.steps)
@@ -681,4 +750,75 @@ function readMatrix(raw: unknown): ChartSpec['matrix'] {
     : undefined;
 
   return { columns, rows, expected };
+}
+
+/** A radar's dial. Percentiles are clamped, since the scale is the whole point. */
+function readRadar(raw: unknown): ChartSpec['radar'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const source = raw as { subject?: unknown; reference?: unknown; slices?: unknown };
+  if (!Array.isArray(source.slices)) return undefined;
+
+  const slices = source.slices
+    .map((entry) => entry as { label?: unknown; percentile?: unknown; group?: unknown })
+    .filter((entry) => typeof entry.label === 'string' && typeof entry.percentile === 'number')
+    .slice(0, 12)
+    .map((entry) => ({
+      label: String(entry.label).slice(0, 26),
+      percentile: Math.max(0, Math.min(100, Number(entry.percentile))),
+      group:
+        entry.group === 'possession' || entry.group === 'defending'
+          ? (entry.group as 'possession' | 'defending')
+          : ('attacking' as const),
+    }));
+  // Fewer than three wedges is not a dial, it is a pie chart with a gap.
+  if (slices.length < 3) return undefined;
+
+  return {
+    subject: typeof source.subject === 'string' ? source.subject.slice(0, 60) : '',
+    reference: typeof source.reference === 'string' ? source.reference.slice(0, 70) : undefined,
+    slices,
+  };
+}
+
+/** A scatter's population. Unlabelled points are kept: they ARE the context. */
+function readScatter(raw: unknown): ChartSpec['scatter'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const source = raw as {
+    xLabel?: unknown;
+    yLabel?: unknown;
+    points?: unknown;
+    medianX?: unknown;
+    medianY?: unknown;
+  };
+  if (typeof source.xLabel !== 'string' || typeof source.yLabel !== 'string') return undefined;
+  if (!Array.isArray(source.points)) return undefined;
+
+  const points = source.points
+    .map((entry) => entry as { label?: unknown; x?: unknown; y?: unknown; mine?: unknown })
+    .filter(
+      (entry) =>
+        typeof entry.x === 'number' &&
+        Number.isFinite(entry.x) &&
+        typeof entry.y === 'number' &&
+        Number.isFinite(entry.y),
+    )
+    .slice(0, 400)
+    .map((entry) => ({
+      label: typeof entry.label === 'string' ? entry.label.slice(0, 28) : undefined,
+      x: Number(entry.x),
+      y: Number(entry.y),
+      mine: entry.mine === true,
+    }));
+  if (points.length < 2) return undefined;
+
+  const median = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+  return {
+    xLabel: source.xLabel.slice(0, 40),
+    yLabel: source.yLabel.slice(0, 40),
+    points,
+    medianX: median(source.medianX),
+    medianY: median(source.medianY),
+  };
 }
