@@ -13,6 +13,7 @@ export const SERVER_MODULES = new Set([
   'projects',
   'calendar',
   'instagram',
+  'youtube',
 ]);
 
 /** How often a live module refreshes itself while it is on screen. */
@@ -24,6 +25,9 @@ const REFRESH_MS: Record<string, number> = {
   calendar: 300_000,
   projects: 900_000,
   instagram: 900_000,
+  // Channel statistics move slowly and the Data API bills by quota, so this
+  // refreshes at the same unhurried cadence as Instagram rather than polling.
+  youtube: 900_000,
 };
 
 /**

@@ -2,6 +2,7 @@ import type { ModuleDefinition, ModuleMetric } from '@/config/modules';
 import type {
   CalendarData,
   InstagramData,
+  YoutubeData,
   ModuleFeed,
   MusicData,
   NewsData,
@@ -180,6 +181,29 @@ export function deriveFace(mod: ModuleDefinition, feed: ModuleFeed<unknown> | un
           { label: 'FOLLOWERS', value: compact(d.followers), level: clamp01(d.followers / 100_000) },
           { label: 'REACH', value: compact(d.reach), level: clamp01(d.reach / 50_000) },
           { label: 'ENGAGE', value: `${d.engagementRate.toFixed(1)}%`, level: clamp01(d.engagementRate / 10) },
+        ],
+      };
+    }
+
+    case 'youtube': {
+      const d = feed.data as YoutubeData;
+      return {
+        source,
+        status: 'online',
+        metrics: [
+          { label: 'SUBS', value: compact(d.subscribers), level: clamp01(d.subscribers / 100_000) },
+          {
+            label: 'AVG VIEWS',
+            value: compact(d.recentAverage),
+            level: clamp01(d.recentAverage / 50_000),
+          },
+          {
+            label: 'SHORTS',
+            // Quantised: the share only moves when an upload lands, but the
+            // percentage would jitter the texture on every refresh otherwise.
+            value: `${step(d.shortsShare * 100, 10)}%`,
+            level: clamp01(d.shortsShare),
+          },
         ],
       };
     }

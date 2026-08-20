@@ -9,6 +9,7 @@ import { NewsPanel } from './NewsPanel';
 import { SportsPanel } from './SportsPanel';
 import { CalendarPanel } from './CalendarPanel';
 import { ProjectsPanel } from './ProjectsPanel';
+import { YoutubePanel } from './YoutubePanel';
 import { InstagramPanel } from './InstagramPanel';
 import { SystemPanel } from './SystemPanel';
 import { MusicPanel } from './MusicPanel';
@@ -45,6 +46,8 @@ export function ModulePanel({ id }: { id: string }) {
       return <ProjectsPanel feed={feed} />;
     case 'instagram':
       return <InstagramPanel feed={feed} />;
+    case 'youtube':
+      return <YoutubePanel feed={feed} />;
     case 'system':
       return <SystemPanel feed={feed} />;
     case 'music':

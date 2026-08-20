@@ -224,6 +224,53 @@ export interface InstagramPost {
   timestamp: number;
 }
 
+export interface YoutubeVideo {
+  id: string;
+  title: string;
+  publishedAt: string;
+  views: number;
+  likes: number;
+  comments: number;
+  seconds: number;
+  isShort: boolean;
+  thumbnail: string;
+}
+
+export interface YoutubeData {
+  channelId: string;
+  title: string;
+  handle: string;
+  subscribers: number;
+  totalViews: number;
+  videoCount: number;
+  /** Mean views across the last ten uploads, not across the channel's life. */
+  recentAverage: number;
+  /** 0..1 share of recent uploads that are Shorts. */
+  shortsShare: number;
+  videos: YoutubeVideo[];
+}
+
+/**
+ * One channel found while surveying a theme, with the figures that make it
+ * worth imitating -- or worth ignoring.
+ */
+export interface ChannelBenchmark {
+  channelId: string;
+  title: string;
+  handle: string;
+  subscribers: number;
+  videoCount: number;
+  /** Mean views over the channel's recent uploads. */
+  recentAverage: number;
+  /** recentAverage / subscribers. Above 0.2 means it reaches beyond its base. */
+  viewsPerSubscriber: number;
+  shortsShare: number;
+  /** Median upload length in seconds, across the sample. */
+  medianSeconds: number;
+  /** Titles of its best recent videos, as concrete patterns to study. */
+  topTitles: string[];
+}
+
 export interface InstagramData {
   username: string;
   followers: number;

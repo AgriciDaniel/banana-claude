@@ -46,7 +46,7 @@ export interface ShapeSpec {
  * chart is expected to carry a source, because a figure with no provenance is
  * not evidence.
  */
-export type ChartKind = 'bar' | 'line' | 'donut' | 'kpi' | 'funnel' | 'flow';
+export type ChartKind = 'bar' | 'line' | 'donut' | 'kpi' | 'funnel' | 'flow' | 'playbook';
 
 export interface ChartPoint {
   label: string;
@@ -68,6 +68,13 @@ export interface ChartSpec {
   benchmarkLabel?: string;
   /** One line of "so what". This is the recommendation, not a description. */
   note?: string;
+  /**
+   * Playbook only: what to do on OUR subject, derived from the references
+   * above. Kept separate from `points` because a playbook has two halves --
+   * what works elsewhere, and the transposition -- and collapsing them into
+   * one list is what turns a scenario back into a list of tips.
+   */
+  steps?: string[];
 }
 
 export interface MediaItem {

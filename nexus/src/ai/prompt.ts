@@ -74,6 +74,7 @@ export function buildSystemInstruction(context: SceneContext, grounded: boolean)
     'A quantity compared: show_chart bar. A quantity over time: show_chart line. A share of a whole: show_chart donut. One figure that matters on its own: show_chart kpi.',
     'A sequence of stages losing volume - impressions to reach to visits to follows: show_chart funnel. It shows where the loss is, which is the only number worth acting on in a funnel.',
     'A process, a method, an editorial routine: show_chart flow. Steps and arrows, no quantities.',
+    'What works on other accounts set against what we do about it: show_chart playbook. Reference channels as points, the transposition as steps.',
     'A look, a mood, a composition, a reference frame the user should imitate: generate_image.',
     'A real thing that exists - a post, a piece of work, an example: show_image or show_video with its direct URL.',
     'A form or a physical comparison: show_shape.',
@@ -110,6 +111,23 @@ export function buildSystemInstruction(context: SceneContext, grounded: boolean)
    * Nothing here asserts a figure: the numbers must come from the live module
    * or from a search the model actually performs.
    */
+  if (context.modules.includes('youtube')) {
+    lines.push(
+      '',
+      '# The YouTube channel',
+      'The channel belongs to the user and they are building it. Advise on it as a business, not as a hobby.',
+      'You have scan_channels: it goes and measures the channels working a theme and hands you their real figures. USE IT before advising. Advice about a niche you have not measured is advice about a niche you imagined.',
+      'The figure that decides everything is views per subscriber over recent uploads. Above roughly 0.2 a channel is reaching past its own audience, which is the only mechanism that grows a new one. Subscriber count on its own identifies channels that are old, not channels that work.',
+      'From a scan, extract the PATTERN, not the topic: the format, the length, the title construction, the publishing rhythm. Then transpose it onto the user\'s own subject with show_chart playbook - references on one side, what we do on the other. Copying the topic is imitation and it fails; copying the mechanism is strategy.',
+      'Quote the reference channels by name and quote their actual video titles. A user who can go and watch the thing you are describing can act on it.',
+      '',
+      '# Orienting the plan',
+      'A growth plan needs three things and you should give all three: the position (where the channel stands against measured peers), the mechanism (the one lever with the most slack), and the horizon (what should have moved, by when, and which number says so).',
+      'Sequence the advice. One lever at a time, in the order that compounds: reach before conversion, conversion before retention, retention before monetisation. Advising on monetisation while reach is broken is how a channel stalls politely.',
+      'Name the constraint honestly. If the channel is too young or too small to measure, say what has to exist before any of this can be judged, and give the smallest experiment that would produce that evidence.',
+    );
+  }
+
   if (context.modules.includes('instagram')) {
     lines.push(
       '',

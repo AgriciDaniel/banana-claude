@@ -1,4 +1,5 @@
 import type {
+  YoutubeData,
   CalendarData,
   InstagramData,
   ModuleFeed,
@@ -83,6 +84,13 @@ export function summariseFeed(id: string, feed: ModuleFeed<unknown> | undefined)
     case 'instagram': {
       const d = feed.data as InstagramData;
       return `instagram: @${d.username}, ${d.followers} followers, reach ${d.reach}, views ${d.views}, engagement ${d.engagementRate.toFixed(1)}%`;
+    }
+
+    case 'youtube': {
+      const d = feed.data as YoutubeData;
+      const best = [...d.videos].sort((a, b) => b.views - a.views)[0];
+      const ratio = d.subscribers > 0 ? d.recentAverage / d.subscribers : 0;
+      return `youtube: ${d.title}${d.handle ? ` (${d.handle})` : ''}, ${d.subscribers} subscribers, ${d.videoCount} videos, ${d.recentAverage} average views over the last ${d.videos.length} uploads, ${ratio.toFixed(2)} views per subscriber, ${Math.round(d.shortsShare * 100)}% shorts${best ? `. Best recent: "${best.title}" at ${best.views} views` : ''}`;
     }
 
     case 'system': {

@@ -24,6 +24,11 @@ const FR: Record<string, ModuleText> = {
     descriptor: 'Ingestion du graphe social / portée',
     metrics: ['PORTÉE', 'ENGAGE', 'FILE'],
   },
+  youtube: {
+    name: 'YouTube',
+    descriptor: 'Telemetrie de chaine / portee audience',
+    metrics: ['ABONNES', 'VUES MOY', 'SHORTS'],
+  },
   stocks: {
     name: 'Bourse',
     descriptor: 'Surface de marché / exposition',

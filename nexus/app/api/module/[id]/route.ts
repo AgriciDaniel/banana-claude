@@ -7,6 +7,7 @@ import { fetchSports } from '@/server/providers/sports';
 import { fetchProjects } from '@/server/providers/projects';
 import { fetchCalendar } from '@/server/providers/calendar';
 import { fetchInstagram } from '@/server/providers/instagram';
+import { fetchYoutube } from '@/server/providers/youtube';
 
 /**
  * One route for every server-backed module.
@@ -33,6 +34,7 @@ const PROVIDERS: Record<string, Provider> = {
   projects: fetchProjects,
   calendar: fetchCalendar,
   instagram: fetchInstagram,
+  youtube: fetchYoutube,
 };
 
 /** No module may hold the interface waiting longer than this. */

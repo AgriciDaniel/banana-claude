@@ -1,6 +1,6 @@
 import { CanvasTexture, LinearFilter, SRGBColorSpace, type Texture } from 'three';
 import { PALETTE } from '@/config/theme';
-import type { ModuleDefinition } from '@/config/modules';
+import { MODULES, type ModuleDefinition } from '@/config/modules';
 import { hash11 } from '@/core/math';
 import { t, type Locale, type TranslationKey } from '@/i18n';
 import { localizeModule, localizeValue, type ModuleText } from '@/i18n/modules';
@@ -164,7 +164,11 @@ function drawHeader(
   ctx.font = `600 20px ${MONO}`;
   ctx.fillStyle = hexA(PALETTE.ghost, 0.95);
   ctx.letterSpacing = '3px';
-  ctx.fillText(String(index + 1).padStart(2, '0') + ' / 10', PAD + 6, y);
+  // Derived, not written: the ring gained an eleventh card and this still
+  // said ten, which is the kind of detail that quietly makes a whole
+  // interface feel untrustworthy.
+  const total = String(MODULES.length).padStart(2, '0');
+  ctx.fillText(`${String(index + 1).padStart(2, '0')} / ${total}`, PAD + 6, y);
 
   // Status pip + label, right aligned.
   const label = t(`state.${status}` as TranslationKey);

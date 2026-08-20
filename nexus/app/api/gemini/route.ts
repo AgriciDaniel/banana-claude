@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { SERVER_TOOL_DECLARATIONS, isServerTool, runServerTool } from "@/server/tools";
 import { COMMAND_DECLARATIONS } from "@/ai/commands";
 import { buildSystemInstruction } from "@/ai/prompt";
 import type { GenerateRequest } from "@/ai/types";
@@ -12,10 +13,14 @@ import type { GenerateRequest } from "@/ai/types";
  *
  * It also owns the FUNCTION-CALLING LOOP, which is the subtle part. A model
  * that calls a tool stops and waits for the result; if nobody sends one, the
- * turn ends silently. So: the route streams the call to the client (which
- * performs it against the live scene immediately), synthesises the tool
- * response itself, and continues the same turn on a second upstream request.
- * The user sees one continuous reply, and the interface has already moved.
+ * turn ends silently.
+ *
+ * Two kinds of call travel through it. Interface commands are streamed to the
+ * client, which performs them against the live scene immediately; the route
+ * cannot observe the outcome, so it answers with the neutral truth that the
+ * request was delivered. Server tools run here instead, and their real output
+ * goes back into the conversation - which is what lets the model reason about
+ * figures it did not invent. Either way the user sees one continuous reply.
  */
 
 export const runtime = "nodejs";
@@ -40,11 +45,11 @@ const GROUNDING = process.env.GEMINI_GROUNDING !== "0";
  * spoken word beats depth, so thinking is off by default.
  */
 const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET ?? "0");
-/** Tool round trips per turn. Two is enough for "open X and tell me about it". */
 /*
- * An analysis legitimately chains several steps -- search the benchmark, chart
- * the figure, then say what to do about it -- so two was too few. Four is the
- * point where a loop is no longer working towards an answer.
+ * Tool round trips per turn. An analysis legitimately chains several steps --
+ * survey the competition, chart the figure, then say what to do about it -- so
+ * the original two was too few. Four is the point where a loop has stopped
+ * working towards an answer.
  */
 const MAX_TOOL_DEPTH = 4;
 
@@ -176,7 +181,11 @@ async function runTurn(
 
   /** The model's turn, kept verbatim so it can be replayed on the follow-up. */
   const modelParts: GeminiPart[] = [];
-  const calls: Array<{ name: string; id?: string }> = [];
+  const calls: Array<{
+    name: string;
+    id?: string;
+    args: Record<string, unknown>;
+  }> = [];
   let sentSources = false;
 
   await consume(upstream.body, (chunk) => {
@@ -197,14 +206,13 @@ async function runTurn(
       if (part.text) send({ type: "text", text: part.text });
 
       if (part.functionCall) {
-        calls.push({ name: part.functionCall.name, id: part.functionCall.id });
-        send({
-          type: "command",
-          command: {
-            name: part.functionCall.name,
-            args: part.functionCall.args ?? {},
-          },
-        });
+        const { name, id, args } = part.functionCall;
+        calls.push({ name, id, args: args ?? {} });
+        // Server tools are not the interface's business; forwarding one would
+        // make the browser log a failure for a command it cannot perform.
+        if (!isServerTool(name)) {
+          send({ type: "command", command: { name, args: args ?? {} } });
+        }
       }
     }
 
@@ -228,13 +236,17 @@ async function runTurn(
    * that outcome, so it reports the neutral truth - the call was delivered -
    * rather than inventing a result the model would then repeat to the user.
    */
-  const responses = calls.map((call) => ({
-    functionResponse: {
-      name: call.name,
-      ...(call.id ? { id: call.id } : {}),
-      response: { status: "dispatched to the interface" },
-    },
-  }));
+  const responses = await Promise.all(
+    calls.map(async (call) => ({
+      functionResponse: {
+        name: call.name,
+        ...(call.id ? { id: call.id } : {}),
+        response: isServerTool(call.name)
+          ? await runServerTool(call.name, call.args, signal)
+          : { status: "dispatched to the interface" },
+      },
+    })),
+  );
 
   /*
    * At the cap, take the functions away rather than simply stopping. A turn
@@ -265,7 +277,11 @@ function callGemini(
   mayCallTools = true,
 ): Promise<Response> {
   const tools: unknown[] = [];
-  if (mayCallTools) tools.push({ functionDeclarations: COMMAND_DECLARATIONS });
+  if (mayCallTools) {
+    tools.push({
+      functionDeclarations: [...COMMAND_DECLARATIONS, ...SERVER_TOOL_DECLARATIONS],
+    });
+  }
   if (grounded) tools.push({ googleSearch: {} });
 
   return withRetry(

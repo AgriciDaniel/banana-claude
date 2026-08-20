@@ -73,6 +73,7 @@ function paint(spec: ChartSpec, reveal: number): Texture {
   else if (spec.kind === 'donut') donut(ctx, spec, plot, reveal);
   else if (spec.kind === 'funnel') funnel(ctx, spec, plot, reveal);
   else if (spec.kind === 'flow') flow(ctx, spec, plot, reveal);
+  else if (spec.kind === 'playbook') playbook(ctx, spec, plot, reveal);
   else kpi(ctx, spec, plot, reveal);
 
   const texture = new CanvasTexture(canvas);
@@ -523,4 +524,69 @@ function round(
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/**
+ * A playbook: what works elsewhere, and what we do about it.
+ *
+ * The layout is an argument in two halves. On the left, real channels with
+ * the figure that earns them a place -- these must be measured, never
+ * remembered. On the right, the transposition onto the user's own subject.
+ * The divider between them is the whole point: it is where imitation becomes
+ * adaptation, and drawing it makes the distinction impossible to skip.
+ */
+function playbook(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal: number) {
+  const midX = plot.x + plot.w * 0.46;
+  const refs = spec.points.slice(0, 3);
+  const steps = (spec.steps ?? []).slice(0, 4);
+
+  ctx.fillStyle = PALETTE.ghost;
+  ctx.font = `600 18px ${MONO}`;
+  ctx.fillText('CE QUI MARCHE', plot.x, plot.y - 6);
+  ctx.fillText('SUR NOS SUJETS', midX + 46, plot.y - 6);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(99,201,255,0.22)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 9]);
+  ctx.beginPath();
+  ctx.moveTo(midX + 14, plot.y - 26);
+  ctx.lineTo(midX + 14, plot.y + plot.h);
+  ctx.stroke();
+  ctx.restore();
+
+  refs.forEach((ref, i) => {
+    const shown = Math.min(1, Math.max(0, reveal * 2 - i * 0.2));
+    if (shown <= 0) return;
+    ctx.globalAlpha = shown;
+    const y = plot.y + 34 + i * 74;
+
+    ctx.fillStyle = PALETTE.lumen;
+    ctx.font = `600 24px ${SANS}`;
+    ctx.fillText(clip(ctx, ref.label, plot.w * 0.4), plot.x, y);
+
+    ctx.fillStyle = PALETTE.signal;
+    ctx.font = `600 22px ${MONO}`;
+    ctx.fillText(format(ref.value, spec.unit), plot.x, y + 30);
+    ctx.globalAlpha = 1;
+  });
+
+  steps.forEach((step, i) => {
+    const shown = Math.min(1, Math.max(0, reveal * 2 - 0.6 - i * 0.15));
+    if (shown <= 0) return;
+    ctx.globalAlpha = shown;
+    const y = plot.y + 30 + i * 56;
+    const x = midX + 46;
+
+    ctx.fillStyle = PALETTE.lock;
+    ctx.beginPath();
+    ctx.arc(x - 20, y - 7, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = PALETTE.lumen;
+    ctx.font = `500 22px ${SANS}`;
+    const lines = wrap(ctx, step, plot.w - (x - plot.x) - 10).slice(0, 2);
+    lines.forEach((text, k) => ctx.fillText(text, x, y + k * 26));
+    ctx.globalAlpha = 1;
+  });
 }

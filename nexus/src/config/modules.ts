@@ -48,6 +48,20 @@ export const MODULES: ModuleDefinition[] = [
     status: 'standby',
   },
   {
+    id: 'youtube',
+    name: 'YouTube',
+    code: 'YTB',
+    category: 'social',
+    descriptor: 'Channel telemetry / audience reach',
+    metrics: [
+      { label: 'SUBS', value: '--', level: 0.3 },
+      { label: 'AVG VIEWS', value: '--', level: 0.25 },
+      { label: 'SHORTS', value: '--', level: 0.2 },
+    ],
+    seed: 0.37,
+    status: 'standby',
+  },
+  {
     id: 'stocks',
     name: 'Stocks',
     code: 'MKT',

@@ -126,9 +126,9 @@ export const COMMAND_DECLARATIONS = [
       properties: {
         kind: {
           type: 'STRING',
-          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow'],
+          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook'],
           description:
-            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1).',
+            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps.',
         },
         title: { type: 'STRING', description: 'The claim the chart makes, in a few words.' },
         source: {
@@ -155,6 +155,12 @@ export const COMMAND_DECLARATIONS = [
         },
         benchmark: { type: 'NUMBER', description: 'Reference value drawn across the plot.' },
         benchmarkLabel: { type: 'STRING', description: 'Two or three words naming the reference.' },
+        steps: {
+          type: 'ARRAY',
+          description:
+            'playbook only: up to four actions on OUR subject, derived from the reference points. Each one concrete enough to start this week.',
+          items: { type: 'STRING' },
+        },
         note: {
           type: 'STRING',
           description:
@@ -355,7 +361,7 @@ export function executeCommand(call: CommandCall): CommandResult {
        * the chart empty and the request silently refused, so the value is
        * supplied instead of demanded.
        */
-      const stepsOnly = call.args.kind === 'flow';
+      const stepsOnly = call.args.kind === 'flow' || call.args.kind === 'playbook';
       const points = raw
         .map((p) => p as { label?: unknown; value?: unknown; mine?: unknown })
         .filter((p) => stepsOnly || (typeof p.value === 'number' && Number.isFinite(p.value)))
@@ -371,7 +377,9 @@ export function executeCommand(call: CommandCall): CommandResult {
       }
       const kind = String(call.args.kind ?? 'bar') as ChartSpec['kind'];
       const spec: ChartSpec = {
-        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow'].includes(kind) ? kind : 'bar',
+        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook'].includes(kind)
+          ? kind
+          : 'bar',
         title: String(call.args.title ?? '').slice(0, 90) || 'Sans titre',
         points,
         source: typeof call.args.source === 'string' ? call.args.source.slice(0, 80) : undefined,
@@ -385,6 +393,9 @@ export function executeCommand(call: CommandCall): CommandResult {
             ? call.args.benchmarkLabel.slice(0, 28)
             : undefined,
         note: typeof call.args.note === 'string' ? call.args.note.slice(0, 160) : undefined,
+        steps: Array.isArray(call.args.steps)
+          ? call.args.steps.map((x) => String(x).slice(0, 120)).slice(0, 4)
+          : undefined,
       };
       showChart(spec);
       // A charted recommendation is a commitment; keep it for next time.
