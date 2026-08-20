@@ -2,6 +2,8 @@ import { getAssistant } from './AssistantEngine';
 import { useAssistantStore, nextMessageId } from '@/stores/useAssistantStore';
 import { executeCommand } from './commands';
 import { bus } from '@/stores/bus';
+import { gestureSnapshot, interaction } from '@/stores/runtime';
+import { rehearse, SCENARIOS } from '@/gesture/devScenarios';
 import type { CommandCall } from './types';
 
 /**
@@ -28,6 +30,31 @@ export interface DevBridge {
   /** Run a command exactly as the model would. */
   run: (name: string, args?: Record<string, unknown>) => void;
   state: () => ReturnType<typeof useAssistantStore.getState>;
+  /** Current tracking readout: hands, posture, rate, latency. */
+  gesture: () => GestureReadout;
+  /** Replay a synthetic hand movement through the live tracking pipeline. */
+  rehearse: (scenario: string) => Promise<boolean>;
+  /** Names of every available rehearsal. */
+  scenarios: () => string[];
+}
+
+export interface GestureReadout {
+  hands: number;
+  posture: string;
+  confidence: number;
+  /** Inference-to-publish cost for the last frame, ms. */
+  latency: number;
+  /** Frames actually processed per second. */
+  rate: number;
+  lastEvent: string | null;
+  freezeProgress: number;
+  spread: number;
+  twoHanded: boolean;
+  /** Primary hand measurements, for diagnosing a detector that stays silent. */
+  span: number;
+  depthVelocity: number;
+  pinch: number;
+  openness: number;
 }
 
 let timer = 0;
@@ -76,6 +103,25 @@ export function installDevBridge(): () => void {
     },
 
     state: () => useAssistantStore.getState(),
+
+    gesture: () => ({
+      hands: gestureSnapshot.hands.length,
+      posture: gestureSnapshot.posture,
+      confidence: gestureSnapshot.confidence,
+      latency: gestureSnapshot.latency,
+      rate: gestureSnapshot.rate,
+      lastEvent: gestureSnapshot.lastEvent?.kind ?? null,
+      freezeProgress: gestureSnapshot.freezeProgress,
+      spread: interaction.spread,
+      twoHanded: interaction.twoHanded,
+      span: gestureSnapshot.primary?.span ?? 0,
+      depthVelocity: gestureSnapshot.primary?.depthVelocity ?? 0,
+      pinch: gestureSnapshot.primary?.pinch ?? 0,
+      openness: gestureSnapshot.primary?.openness ?? 0,
+    }),
+
+    rehearse: (scenario) => rehearse(scenario),
+    scenarios: () => Object.keys(SCENARIOS),
   };
 
   (window as unknown as { __nexus: DevBridge }).__nexus = bridge;

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { HandTracker } from '@/gesture/HandTracker';
 import { GestureEngine } from '@/gesture/GestureEngine';
+import { registerFramePublisher, cameraMuted } from '@/gesture/devFeed';
 import { gestureSnapshot, interaction } from '@/stores/runtime';
 import { bus } from '@/stores/bus';
 import { useSystemStore } from '@/stores/useSystemStore';
@@ -40,19 +41,20 @@ export function useHandTracking(enabled: boolean) {
     const tracker = new HandTracker({ numHands: 2 });
     const engine = new GestureEngine();
 
-    const loop = () => {
-      raf = requestAnimationFrame(loop);
-      if (disposed) return;
-
-      const now = performance.now();
-      const result = tracker.detect(now);
-      // No new camera frame — nothing to infer, nothing to publish.
-      if (!result) return;
-
+    /**
+     * Turn one inference result into interface state. Split out from the loop
+     * so a synthetic frame can be pushed through the identical path -- see
+     * `devFeed` -- rather than a parallel one that could drift from it.
+     */
+    const publish = (result: ReturnType<typeof tracker.detect> & object, now: number) => {
       const t0 = performance.now();
       engine.setGrabbing(useCarouselStore.getState().draggingId !== null);
       const out = engine.update(result, now);
-      const latency = performance.now() - t0;
+      // The label on this number is "latency", so it has to cover the whole
+      // path from camera frame to interface state. Inference dominates it by
+      // two orders of magnitude; reporting only the detector cost made the
+      // pipeline look ten times faster than it is.
+      const latency = tracker.inferenceMs + (performance.now() - t0);
 
       if (lastFrameAt > 0) rate.push(1000 / Math.max(now - lastFrameAt, 1));
       lastFrameAt = now;
@@ -87,6 +89,23 @@ export function useHandTracking(enabled: boolean) {
       }
     };
 
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      if (disposed) return;
+
+      if (cameraMuted()) return;
+
+      const now = performance.now();
+      const result = tracker.detect(now);
+      // No new camera frame — nothing to infer, nothing to publish.
+      if (!result) return;
+      publish(result, now);
+    };
+
+    registerFramePublisher((result, now) => {
+      if (!disposed) publish(result, now);
+    });
+
     (async () => {
       setTracking('requesting');
       log.sys(t('log.cameraRequest'));
@@ -116,6 +135,7 @@ export function useHandTracking(enabled: boolean) {
 
     return () => {
       disposed = true;
+      registerFramePublisher(null);
       cancelAnimationFrame(raf);
       tracker.dispose();
       engine.reset();

@@ -53,6 +53,13 @@ export interface HandFrame {
   /** Rate of change of `depth`, per second. */
   depthVelocity: number;
   posture: Posture;
+  /**
+   * Whether only the index finger is extended, recomputed every frame.
+   * Kept apart from `posture` because posture is a hysteretic state: folding
+   * pointing into it directly meant a single pointing frame could latch the
+   * hand into that posture for as long as it stayed tracked.
+   */
+  pointing: boolean;
   /** Tracking confidence reported by the detector. */
   score: number;
   /** Palm projected onto the interaction plane in world space. */

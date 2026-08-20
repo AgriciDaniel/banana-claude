@@ -15,7 +15,7 @@ export class PostureDetector implements Detector {
   private current: Posture = 'neutral';
 
   update({ hand, now }: DetectorContext): GestureEvent | null {
-    const next = this.classify(hand.openness, hand.pinch, hand.posture === 'point');
+    const next = this.classify(hand.openness, hand.pinch, hand.pointing);
     if (next === this.current) return null;
     const previous = this.current;
     this.current = next;

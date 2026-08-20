@@ -14,6 +14,15 @@ const MAX_SPEED = 0.09; // normalised units / second
 const MIN_OPENNESS = 0.68;
 const RELEASE_OPENNESS = 0.45;
 const RELEASE_SPEED = 0.34;
+/**
+ * A hand moving toward or away from the camera is not a still hand, even
+ * though its palm sits at the same place on screen. Push and pull are
+ * performed with an open palm that does not travel laterally, so without this
+ * the freeze would arm itself during the very gesture it then locks out.
+ * Matched to the depth detector's own trigger rate so the two agree on what
+ * counts as deliberate movement.
+ */
+const MAX_DEPTH_RATE = 0.28;
 
 export class PalmHoldDetector implements Detector {
   readonly id = 'palmHold';
@@ -33,7 +42,11 @@ export class PalmHoldDetector implements Detector {
       return null;
     }
 
-    const steady = hand.openness >= MIN_OPENNESS && speed <= MAX_SPEED && hand.pinch < 0.25;
+    const steady =
+      hand.openness >= MIN_OPENNESS &&
+      speed <= MAX_SPEED &&
+      Math.abs(hand.depthVelocity) <= MAX_DEPTH_RATE &&
+      hand.pinch < 0.25;
     if (!steady) {
       this.since = 0;
       return null;

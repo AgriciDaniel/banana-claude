@@ -36,6 +36,8 @@ export class HandTracker {
   error: string | null = null;
   /** True when the WASM backend accepted the GPU delegate. */
   gpuDelegate = false;
+  /** Cost of the last inference in ms, model only. */
+  inferenceMs = 0;
 
   private landmarker: HandLandmarker | null = null;
   private stream: MediaStream | null = null;
@@ -159,8 +161,11 @@ export class HandTracker {
     this.lastVideoTime = this.video.currentTime;
     const ts = Math.max(nowMs, this.lastTimestamp + 1);
     this.lastTimestamp = ts;
+    const started = performance.now();
     try {
-      return this.landmarker.detectForVideo(this.video, ts);
+      const out = this.landmarker.detectForVideo(this.video, ts);
+      this.inferenceMs = performance.now() - started;
+      return out;
     } catch {
       return null;
     }

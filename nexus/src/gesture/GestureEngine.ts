@@ -64,6 +64,7 @@ function makeSlot(): HandSlot {
       velocity: { x: 0, y: 0 },
       depthVelocity: 0,
       posture: 'neutral',
+      pointing: false,
       score: 0,
       world: [0, 0, 0],
     },
@@ -217,7 +218,7 @@ export class GestureEngine {
     slot.prevPalm.y = slot.frame.palm.y;
     slot.prevSpan = span;
 
-    if (isPointing(l)) slot.frame.posture = 'point';
+    slot.frame.pointing = isPointing(l);
     slot.lastSeen = now;
     slot.active = true;
 
@@ -236,7 +237,7 @@ export class GestureEngine {
 
     // Posture runs first so downstream consumers see the settled posture.
     const posture = slot.detectors.posture.update(ctx);
-    if (slot.frame.posture !== 'point') slot.frame.posture = slot.detectors.posture.posture;
+    slot.frame.posture = slot.detectors.posture.posture;
 
     const pinch = slot.detectors.pinch.update(ctx);
     const palmHold = slot.detectors.palmHold.update(ctx);
