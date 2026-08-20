@@ -56,6 +56,9 @@ async function get(base, path, token) {
 
 await loadEnv();
 
+/** Scopes reported by debug_token, used when explaining a later failure. */
+let scopes = [];
+
 const token = process.env.INSTAGRAM_TOKEN ?? process.env.IG_GRAPH_TOKEN;
 
 console.log('\nNEXUS \u00b7 Instagram check');
@@ -98,6 +101,37 @@ if (/^\d+\|/.test(token)) {
 
 ok(`Token present (${token.length} characters)`);
 
+/*
+ * Ask Meta what this token actually is before probing endpoints with it.
+ *
+ * debug_token answers in one call what would otherwise take several guesses:
+ * the token type (user, page, system user, app), the scopes actually granted,
+ * whether it is still valid, and when it expires. Nearly every confusing
+ * failure in this setup is really one of those four facts.
+ */
+const debug = await get(FB, `debug_token?input_token=${encodeURIComponent(token)}`, token);
+const info = debug.body?.data;
+
+if (info) {
+  if (info.is_valid === false) {
+    bad('Meta reports this token as no longer valid.');
+    note('Generate a fresh one and paste it again.');
+    process.exit(1);
+  }
+  const kind = { USER: 'user', PAGE: 'page', SYSTEM_USER: 'system user', APP: 'app' }[info.type] ?? info.type;
+  ok(`Type: ${kind}${info.application ? ` · app "${info.application.trim()}"` : ''}`);
+  if (info.expires_at) {
+    const days = Math.round((info.expires_at * 1000 - Date.now()) / 86400000);
+    ok(`Expires in ${days} days`);
+  }
+  scopes = info.scopes ?? [];
+  const wanted = ['instagram_basic', 'instagram_manage_insights'];
+  for (const scope of wanted) {
+    if (scopes.includes(scope)) ok(`Scope ${scope}`);
+    else bad(`Scope ${scope} missing`);
+  }
+}
+
 // --- Route A: Instagram Login. The token identifies the account directly. ---
 head('Route A \u2014 Instagram Login (no Facebook Page needed)');
 const a = await get(IG, 'me?fields=username,account_type,followers_count,media_count', token);
@@ -124,8 +158,24 @@ let routeB = null;
 if (pages.ok && Array.isArray(pages.body.data)) {
   if (pages.body.data.length === 0) {
     bad('The token sees no Facebook Pages.');
-    note('This is what "linked to a profile rather than a Page" looks like.');
-    note('Linking Instagram to a personal profile via Accounts Center does not count.');
+    /*
+     * An empty list has two very different causes and the API reports both the
+     * same way. Distinguishing them from the granted scopes saves a long hunt
+     * through the Business Manager for a Page that was there all along.
+     */
+    if (!scopes.includes('pages_show_list')) {
+      note('Cause: the token lacks pages_show_list, so Pages cannot be listed');
+      note('at all. This says nothing about whether a Page exists.');
+      note('');
+      note('Two ways forward:');
+      note('  a) reissue the token with pages_show_list and pages_read_engagement');
+      note('  b) skip discovery: set INSTAGRAM_USER_ID by hand, from');
+      note('     Business Manager → Accounts → Instagram accounts → your account');
+      note('     (the id is shown under the name, as it is for Pages)');
+    } else {
+      note('This is what "linked to a profile rather than a Page" looks like.');
+      note('Linking Instagram to a personal profile via Accounts Center does not count.');
+    }
   }
   for (const page of pages.body.data) {
     const linked = page.instagram_business_account;

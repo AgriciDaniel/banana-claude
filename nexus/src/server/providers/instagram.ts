@@ -102,7 +102,15 @@ export async function fetchInstagram(
     account_type?: string;
   }>(
     base,
-    `${me}?fields=username,account_type,followers_count,follows_count,media_count`,
+    /*
+     * `account_type` exists only on the Instagram Login route. Asking for it on
+     * the Graph route fails the WHOLE request with "nonexisting field", which
+     * surfaced as "the token was rejected" — a request that was actually fine
+     * apart from one field name.
+     */
+    `${me}?fields=username,followers_count,follows_count,media_count${
+      usingInstagramLogin ? ',account_type' : ''
+    }`,
     token,
     signal,
   );
