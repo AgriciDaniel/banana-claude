@@ -20,6 +20,31 @@ function key(): string | null {
   return value.length > 0 ? value : null;
 }
 
+/** Keys from aistudio.google.com. They only ever speak to Gemini. */
+function isAiStudioKey(value: string): boolean {
+  return value.startsWith('AQ.');
+}
+
+/**
+ * A Google API key is around thirty-nine characters. Anything much shorter is
+ * a placeholder or a truncated paste, and it is worth naming as such because
+ * of where those tend to come from: a variable already set in the shell or in
+ * the user's system environment SHADOWS .env.local entirely under Next, so a
+ * perfectly good key can be pasted into the file and never once be read. That
+ * failure is invisible from inside the app unless something says it out loud.
+ */
+const PLAUSIBLE_KEY_LENGTH = 30;
+
+function isTruncatedKey(value: string): boolean {
+  return value.length < PLAUSIBLE_KEY_LENGTH;
+}
+
+const SHADOWED_HINT =
+  'The YOUTUBE_API_KEY being read is too short to be a real key. Something is supplying a placeholder: check for a YOUTUBE_API_KEY already set in your shell or in your Windows user environment variables, because those take precedence over .env.local and a key pasted into the file will be ignored while one exists.';
+
+const AI_STUDIO_HINT =
+  'That is an AI Studio key (the "AQ." kind) and it only works with Gemini - enabling YouTube Data API v3 cannot change that, because the key belongs to no Cloud project. Create one at console.cloud.google.com under APIs and services, Credentials, Create credentials, API key. It will start with "AIza".';
+
 async function api<T>(
   path: string,
   apiKey: string,
@@ -30,16 +55,37 @@ async function api<T>(
     headers: { accept: 'application/json' },
   });
   if (!response.ok) {
+    const body = await response.text().catch(() => '');
+
     /*
      * Quota exhaustion is the failure users actually hit, and it looks
      * identical to a bad key unless the body is read. Ten thousand units a day
      * sounds generous until a search costs a hundred of them.
      */
-    const body = await response.text().catch(() => '');
     if (response.status === 403 && body.includes('quotaExceeded')) {
       throw new Error('YouTube daily quota exhausted; it resets at midnight Pacific');
     }
+
+    /*
+     * The one that wastes an afternoon. An AI Studio key -- the kind handed
+     * out at aistudio.google.com, recognisable by its "AQ." prefix -- is
+     * scoped to the Generative Language API and belongs to no Cloud project,
+     * so YouTube can never accept it however many APIs you enable.
+     *
+     * The diagnosis keys off the PREFIX rather than the response, because
+     * Google gives two different answers for the same cause: 401 "API keys are
+     * not supported by this API" to one caller and 400 "API key not valid" to
+     * another, seemingly depending on headers. Both send people hunting for an
+     * OAuth flow that is not the problem. The prefix does not vary.
+     */
+    if (isAiStudioKey(apiKey)) {
+      throw new Error(AI_STUDIO_HINT);
+    }
+
     if (response.status === 403) throw new Error('YouTube rejected the API key');
+    if (response.status === 400 || response.status === 401) {
+      throw new Error('YouTube rejected the API key as invalid for this API');
+    }
     return null;
   }
   return (await response.json()) as T;
@@ -48,7 +94,14 @@ async function api<T>(
 interface ChannelItem {
   id: string;
   snippet: { title: string; customUrl?: string; publishedAt: string };
-  statistics: { subscriberCount?: string; viewCount?: string; videoCount?: string };
+  statistics: {
+    /** Rounded down to three significant figures by YouTube, always. */
+    subscriberCount?: string;
+    viewCount?: string;
+    videoCount?: string;
+    /** A channel may hide this, in which case the count is meaningless. */
+    hiddenSubscriberCount?: boolean;
+  };
   contentDetails?: { relatedPlaylists?: { uploads?: string } };
 }
 
@@ -78,6 +131,33 @@ export async function fetchYoutube(
 ): Promise<ModuleFeed<YoutubeData>> {
   const apiKey = key();
   const channel = (process.env.YOUTUBE_CHANNEL_ID ?? '').trim();
+
+  /*
+   * Both caught before the request, so the panel names the actual problem
+   * rather than reporting a rejection the user would reasonably read as
+   * "wrong channel" and then spend an afternoon on.
+   */
+  if (apiKey && isTruncatedKey(apiKey)) {
+    return {
+      status: 'unconfigured',
+      data: null,
+      error: null,
+      fetchedAt: Date.now(),
+      source: 'YouTube',
+      setupHint: SHADOWED_HINT,
+    };
+  }
+
+  if (apiKey && isAiStudioKey(apiKey)) {
+    return {
+      status: 'unconfigured',
+      data: null,
+      error: null,
+      fetchedAt: Date.now(),
+      source: 'YouTube',
+      setupHint: AI_STUDIO_HINT,
+    };
+  }
 
   if (!apiKey || !channel) {
     return {
@@ -214,8 +294,18 @@ export async function scanChannels(
 
   const out: ChannelBenchmark[] = [];
   for (const item of channels?.items ?? []) {
+    /*
+     * A channel may hide its subscriber count, and then the field is either
+     * absent or zero. Ranking by views per subscriber would quietly send it to
+     * the bottom as though it performed badly, so it is dropped instead: an
+     * unmeasurable channel is not a weak one, and pretending otherwise is how
+     * a benchmark starts lying.
+     */
+    if (item.statistics.hiddenSubscriberCount) continue;
+
     const subscribers = num(item.statistics.subscriberCount);
-    // Below a few thousand subscribers the ratios are noise, not signal.
+    // Below a few thousand subscribers the ratios are noise, not signal --
+    // and the count is rounded to three significant figures anyway.
     if (subscribers < 2000) continue;
 
     const uploads = item.contentDetails?.relatedPlaylists?.uploads;

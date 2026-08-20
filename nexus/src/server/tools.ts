@@ -86,7 +86,7 @@ export async function runServerTool(
           bestRecentTitles: c.topTitles,
         })),
         howToRead:
-          'viewsPerSubscriber above 0.2 means the channel reaches past its own audience. typicalLengthSeconds and shortsShare describe the format that is working. bestRecentTitles are the actual patterns to study - quote them.',
+          'viewsPerSubscriber above 0.2 means the channel reaches past its own audience. typicalLengthSeconds and shortsShare describe the format that is working. bestRecentTitles are the actual patterns to study - quote them. Two caveats you must respect: a Short counts a view every time it starts or replays, so view figures from a channel with a high shortsShare are not comparable like-for-like with a long-form channel and you should say so rather than ranking them together silently; and subscriber counts are rounded to three significant figures at source, so treat small differences in the ratio as noise.',
       };
     }
 
