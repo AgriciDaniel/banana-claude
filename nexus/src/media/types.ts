@@ -54,7 +54,8 @@ export type ChartKind =
   | 'funnel'
   | 'flow'
   | 'playbook'
-  | 'plan';
+  | 'plan'
+  | 'profile';
 
 export interface ChartPoint {
   label: string;
@@ -90,6 +91,13 @@ export interface ChartSpec {
    * worked, which is precisely what the next conversation needs to know.
    */
   target?: { metric: string; from: number; to: number; unit?: string };
+  /**
+   * Profile only: what characterises the subject, as plain label and value.
+   * Numbers alone cannot carry this -- a position, a club and a nationality
+   * are facts without being quantities -- so it is a separate list rather
+   * than a strained use of `points`.
+   */
+  facts?: Array<{ label: string; value: string }>;
 }
 
 export interface MediaItem {

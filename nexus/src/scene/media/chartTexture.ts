@@ -75,6 +75,7 @@ function paint(spec: ChartSpec, reveal: number): Texture {
   else if (spec.kind === 'flow') flow(ctx, spec, plot, reveal);
   else if (spec.kind === 'playbook') playbook(ctx, spec, plot, reveal);
   else if (spec.kind === 'plan') plan(ctx, spec, plot, reveal);
+  else if (spec.kind === 'profile') profile(ctx, spec, plot, reveal);
   else kpi(ctx, spec, plot, reveal);
 
   const texture = new CanvasTexture(canvas);
@@ -690,4 +691,72 @@ function plan(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal
 
   ctx.fillStyle = PALETTE.lock;
   ctx.fillText(arrow + to, boxX + 16 + fromW, spineY + 56);
+}
+
+/**
+ * A profile: who or what this is, and what it has done.
+ *
+ * The companion to a photograph. Showing a face answers "which one" and
+ * nothing else; the questions that follow are always what they play, where,
+ * and what they have won. Facts run down the left as label and value, honours
+ * down the right, because those are two different kinds of claim and mixing
+ * them into one list makes both harder to scan.
+ */
+function profile(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal: number) {
+  const facts = (spec.facts ?? []).slice(0, 6);
+  const honours = (spec.steps ?? []).slice(0, 6);
+  const split = honours.length > 0 ? plot.x + plot.w * 0.46 : plot.x + plot.w;
+
+  if (honours.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(99,201,255,0.18)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 9]);
+    ctx.beginPath();
+    ctx.moveTo(split + 16, plot.y - 18);
+    ctx.lineTo(split + 16, plot.y + plot.h);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  facts.forEach((fact, i) => {
+    const shown = Math.min(1, Math.max(0, reveal * 2 - i * 0.12));
+    if (shown <= 0) return;
+    ctx.globalAlpha = shown;
+    const y = plot.y + 22 + i * 52;
+
+    ctx.fillStyle = PALETTE.ghost;
+    ctx.font = `500 17px ${MONO}`;
+    ctx.fillText(clip(ctx, fact.label.toUpperCase(), split - plot.x - 20), plot.x, y);
+
+    ctx.fillStyle = PALETTE.lumen;
+    ctx.font = `600 24px ${SANS}`;
+    ctx.fillText(clip(ctx, fact.value, split - plot.x - 20), plot.x, y + 27);
+    ctx.globalAlpha = 1;
+  });
+
+  if (honours.length === 0) return;
+
+  const x = split + 46;
+  ctx.fillStyle = PALETTE.ghost;
+  ctx.font = `600 17px ${MONO}`;
+  ctx.fillText('PALMARES', x, plot.y - 18);
+
+  honours.forEach((line, i) => {
+    const shown = Math.min(1, Math.max(0, reveal * 2 - 0.3 - i * 0.12));
+    if (shown <= 0) return;
+    ctx.globalAlpha = shown;
+    const y = plot.y + 22 + i * 50;
+
+    ctx.fillStyle = PALETTE.lock;
+    ctx.beginPath();
+    ctx.arc(x - 20, y - 7, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = PALETTE.lumen;
+    ctx.font = `500 21px ${SANS}`;
+    const lines = wrap(ctx, line, plot.w - (x - plot.x) - 10).slice(0, 2);
+    lines.forEach((text, k) => ctx.fillText(text, x, y + k * 24));
+    ctx.globalAlpha = 1;
+  });
 }

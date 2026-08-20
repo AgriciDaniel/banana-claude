@@ -9,6 +9,7 @@ import { useCarouselStore } from '@/stores/useCarouselStore';
 import { Spring, Spring3 } from '@/animation/Spring';
 import { SPRINGS } from '@/animation/presets';
 import { MediaFrame } from './MediaFrame';
+import type { MediaItem } from '@/media/types';
 
 /**
  * Where content stands in the room.
@@ -24,6 +25,24 @@ import { MediaFrame } from './MediaFrame';
  * beneath the last line instead of being read through it.
  */
 const STAGE_Y = 0.5;
+
+/**
+ * Where a frame sits when two belong together.
+ *
+ * A photograph and the factsheet that explains it are one answer in two
+ * pieces, and stacking them buried the picture completely behind an opaque
+ * panel. When the current topic holds exactly a visual and a chart, they stand
+ * side by side instead -- picture on the left, reading matter on the right,
+ * which is the order they are looked at in.
+ */
+function pairSide(stack: MediaItem[], index: number): 'left' | 'right' | null {
+  if (stack.length !== 2) return null;
+  const kinds = stack.map((m) => m.kind);
+  const visual = kinds.findIndex((k) => k === 'image' || k === 'video');
+  const chart = kinds.findIndex((k) => k === 'chart');
+  if (visual === -1 || chart === -1) return null;
+  return index === visual ? 'left' : 'right';
+}
 
 export function MediaStage() {
   const group = useRef<Group>(null);
@@ -74,7 +93,7 @@ export function MediaStage() {
   return (
     <group ref={group} name="media-stage">
       {stack.map((item, index) => (
-        <MediaFrame key={item.id} item={item} index={index} />
+        <MediaFrame key={item.id} item={item} index={index} pairSide={pairSide(stack, index)} />
       ))}
 
       {/* On their way out: behind everything, shrinking, not interactive. */}

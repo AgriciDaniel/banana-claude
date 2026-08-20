@@ -126,9 +126,9 @@ export const COMMAND_DECLARATIONS = [
       properties: {
         kind: {
           type: 'STRING',
-          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan'],
+          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan', 'profile'],
           description:
-            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps. plan for an action plan: each point is one action, its value is the week it happens in, and "target" says which number should move and how far.',
+            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps. plan for an action plan: each point is one action, its value is the week it happens in, and "target" says which number should move and how far. profile is the factsheet that belongs beside a photograph: "facts" carries what characterises the subject and "steps" its honours or milestones.',
         },
         title: { type: 'STRING', description: 'The claim the chart makes, in a few words.' },
         source: {
@@ -158,8 +158,18 @@ export const COMMAND_DECLARATIONS = [
         steps: {
           type: 'ARRAY',
           description:
-            'playbook only: up to four actions on OUR subject, derived from the reference points. Each one concrete enough to start this week.',
+            'A short list of lines. For playbook, up to four actions on OUR subject derived from the reference points, each concrete enough to start this week. For profile, the honours or milestones: "Coupe du monde 2018", "Ballon d\'Or 2025".',
           items: { type: 'STRING' },
+        },
+        facts: {
+          type: 'ARRAY',
+          description:
+            'profile only: up to six label/value pairs describing the subject - position, club, age, nationality, height. Values are plain text, not numbers.',
+          items: {
+            type: 'OBJECT',
+            properties: { label: { type: 'STRING' }, value: { type: 'STRING' } },
+            required: ['label', 'value'],
+          },
         },
         target: {
           type: 'OBJECT',
@@ -179,7 +189,7 @@ export const COMMAND_DECLARATIONS = [
             'One sentence saying what to DO about what the chart shows. Imperative, concrete, specific to this user.',
         },
       },
-      required: ['kind', 'title', 'points'],
+      required: ['kind', 'title'],
     },
   },
   {
@@ -373,8 +383,9 @@ export function executeCommand(call: CommandCall): CommandResult {
        * the chart empty and the request silently refused, so the value is
        * supplied instead of demanded.
        */
-      const stepsOnly =
-        call.args.kind === 'flow' || call.args.kind === 'playbook' || call.args.kind === 'plan';
+      // These kinds carry text, not quantities: their points would be dropped
+      // by a numeric filter that has nothing to filter.
+      const stepsOnly = ['flow', 'playbook', 'plan', 'profile'].includes(String(call.args.kind));
       const points = raw
         .map((p) => p as { label?: unknown; value?: unknown; mine?: unknown })
         .filter((p) => stepsOnly || (typeof p.value === 'number' && Number.isFinite(p.value)))
@@ -384,13 +395,25 @@ export function executeCommand(call: CommandCall): CommandResult {
           value: typeof p.value === 'number' && Number.isFinite(p.value) ? Number(p.value) : 1,
           mine: p.mine === true,
         }));
-      if (points.length === 0) {
+      /*
+       * A profile has no points at all -- its content is `facts` and `steps` --
+       * so demanding one silently refused every factsheet the model tried to
+       * draw. Each kind is asked for what it actually carries.
+       */
+      const hasContent =
+        points.length > 0 ||
+        (call.args.kind === 'profile' &&
+          (Array.isArray(call.args.facts) || Array.isArray(call.args.steps)));
+
+      if (!hasContent) {
         result = fail('a chart needs at least one point with a numeric value');
         break;
       }
       const kind = String(call.args.kind ?? 'bar') as ChartSpec['kind'];
       const spec: ChartSpec = {
-        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan'].includes(kind)
+        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan', 'profile'].includes(
+          kind,
+        )
           ? kind
           : 'bar',
         title: String(call.args.title ?? '').slice(0, 90) || 'Sans titre',
@@ -407,6 +430,7 @@ export function executeCommand(call: CommandCall): CommandResult {
             : undefined,
         note: typeof call.args.note === 'string' ? call.args.note.slice(0, 160) : undefined,
         target: readTarget(call.args.target),
+        facts: readFacts(call.args.facts),
         steps: Array.isArray(call.args.steps)
           ? call.args.steps.map((x) => String(x).slice(0, 120)).slice(0, 4)
           : undefined,
@@ -520,4 +544,18 @@ function readTarget(raw: unknown): ChartSpec['target'] {
     to: t.to,
     unit: typeof t.unit === 'string' ? t.unit.slice(0, 8) : undefined,
   };
+}
+
+/** A profile's label/value rows, keeping only the pairs that are complete. */
+function readFacts(raw: unknown): ChartSpec['facts'] {
+  if (!Array.isArray(raw)) return undefined;
+  const facts = raw
+    .map((entry) => entry as { label?: unknown; value?: unknown })
+    .filter((entry) => typeof entry.label === 'string' && typeof entry.value === 'string')
+    .slice(0, 6)
+    .map((entry) => ({
+      label: String(entry.label).slice(0, 30),
+      value: String(entry.value).slice(0, 46),
+    }));
+  return facts.length > 0 ? facts : undefined;
 }
