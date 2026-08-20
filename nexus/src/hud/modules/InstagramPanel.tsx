@@ -4,12 +4,48 @@ import type { InstagramData, ModuleFeed } from '@/modules/types';
 import { Bar, FeedState, Line, Provenance, Section, Spark } from './shared';
 import { useT } from '@/i18n';
 import { showImage } from '@/media/actions';
+import { useMediaStore } from '@/stores/useMediaStore';
+import { getAudio } from '@/audio/AudioEngine';
+import { useRef } from 'react';
 
 const compact = (n: number) =>
   n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n);
 
 /** Audience, reach, growth and top content. */
 export function InstagramPanel({ feed }: { feed: ModuleFeed<InstagramData> }) {
+  const stack = useMediaStore((s) => s.stack);
+  const dismissMedia = useMediaStore((s) => s.dismiss);
+  /*
+   * Which media id each post put in the room, so a second click on the same
+   * thumbnail takes it back down. Checked against the live stack rather than
+   * trusted on its own: the panel can be cleared from the room or replaced by
+   * the assistant, and the row must not then claim to be open.
+   */
+  const opened = useRef<Record<string, string>>({});
+
+  const isOpen = (postId: string) => {
+    const shownId = opened.current[postId];
+    return Boolean(shownId && stack.some((m) => m.id === shownId));
+  };
+
+  const togglePost = (post: { id: string; url?: string; caption?: string; mediaType: string; permalink?: string }) => {
+    const shownId = opened.current[post.id];
+    if (shownId && stack.some((m) => m.id === shownId)) {
+      dismissMedia(shownId);
+      delete opened.current[post.id];
+      getAudio().collapse();
+      return;
+    }
+    if (!post.url) {
+      if (post.permalink) window.open(post.permalink, '_blank', 'noreferrer');
+      return;
+    }
+    opened.current[post.id] = showImage(post.url, {
+      title: post.caption || post.mediaType,
+      origin: 'module',
+    });
+  };
+
   const t = useT();
   const gate = FeedState({ feed });
   if (gate) return gate;
@@ -71,14 +107,14 @@ export function InstagramPanel({ feed }: { feed: ModuleFeed<InstagramData> }) {
             <button
               key={post.id}
               type="button"
-              // A thumbnail is a link to somewhere else; here it is the object
-              // itself, so clicking it puts the post in the room.
-              onClick={() =>
-                post.url
-                  ? showImage(post.url, { title: post.caption || post.mediaType, origin: 'module' })
-                  : window.open(post.permalink, '_blank', 'noreferrer')
-              }
-              className="group flex w-full items-center gap-2 border-b border-signal/8 py-2 text-left last:border-0"
+              // A thumbnail is usually a link to somewhere else; here it is the
+              // object itself, so clicking puts the post in the room and
+              // clicking again takes it back down.
+              onClick={() => togglePost(post)}
+              aria-pressed={isOpen(post.id)}
+              className={`group flex w-full items-center gap-2 border-b border-signal/8 py-2 text-left last:border-0 ${
+                isOpen(post.id) ? 'bg-signal/8' : ''
+              }`}
             >
               {post.url && (
                 /* eslint-disable-next-line @next/next/no-img-element */

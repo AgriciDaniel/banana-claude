@@ -6,7 +6,7 @@ import type { Group } from 'three';
 import { SPACE } from '@/config/theme';
 import { useMediaStore } from '@/stores/useMediaStore';
 import { useCarouselStore } from '@/stores/useCarouselStore';
-import { Spring3 } from '@/animation/Spring';
+import { Spring, Spring3 } from '@/animation/Spring';
 import { SPRINGS } from '@/animation/presets';
 import { MediaFrame } from './MediaFrame';
 
@@ -35,6 +35,12 @@ export function MediaStage() {
     () => new Spring3([0, STAGE_Y, SPACE.orbitRadius + 2.1], SPRINGS.glide),
     [],
   );
+  /*
+   * Stepping aside is not enough on its own: at full size a landscape frame
+   * pushed left runs off the edge of the screen, which is exactly what happens
+   * when a post is opened from the module panel that caused the step.
+   */
+  const shrink = useMemo(() => new Spring(1, SPRINGS.glide), []);
 
   useFrame((_, delta) => {
     if (!group.current) return;
@@ -54,8 +60,11 @@ export function MediaStage() {
       SPACE.orbitRadius + (expandedId ? 1.7 : 2.1),
     );
     motion.update(dt);
+    shrink.set(expandedId ? 0.78 : 1);
+    shrink.update(dt);
 
     group.current.position.set(motion.x.value, motion.y.value, motion.z.value);
+    group.current.scale.setScalar(shrink.value);
     group.current.rotation.y = expandedId ? 0.2 : 0;
     group.current.visible = stack.length + retiring.length > 0;
   });

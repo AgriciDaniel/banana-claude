@@ -211,9 +211,12 @@ async function runTurn(
     args: Record<string, unknown>;
   }> = [];
   let sentSources = false;
+  let sentAnything = false;
+  let sawError = false;
 
   await consume(upstream.body, (chunk) => {
     if (chunk.error?.message) {
+      sawError = true;
       send({ type: "error", error: chunk.error.message });
       return;
     }
@@ -227,7 +230,10 @@ async function runTurn(
       // Reasoning is internal. Speaking it aloud would be wrong and unsettling.
       if (part.thought) continue;
 
-      if (part.text) send({ type: "text", text: part.text });
+      if (part.text) {
+        sentAnything = true;
+        send({ type: "text", text: part.text });
+      }
 
       if (part.functionCall) {
         const { name, id, args } = part.functionCall;
@@ -251,6 +257,21 @@ async function runTurn(
       }
     }
   });
+
+  /*
+   * A turn can finish having said nothing, called nothing and failed at
+   * nothing: a model that spends its whole output budget thinking stops on
+   * MAX_TOKENS with an empty message. Left alone that is forty seconds of
+   * silence the user cannot distinguish from a hang, so it is reported as
+   * what it is rather than swallowed.
+   */
+  if (!sentAnything && calls.length === 0 && !sawError && !signal.aborted) {
+    send({
+      type: "error",
+      error: "The model returned an empty answer, most likely having spent its budget deliberating. Try asking again, or more narrowly.",
+    });
+    return;
+  }
 
   if (calls.length === 0 || signal.aborted) return;
 
@@ -336,17 +357,25 @@ async function callGemini(
         generationConfig: {
           temperature: 0.75,
           topP: 0.95,
-          maxOutputTokens: 1024,
           /*
-           * Not every model will let thinking be switched off: gemini-3.6-flash
-           * answers 400 to a budget of zero, which surfaced as INVALID_ARGUMENT
-           * on every request that fell back to it. The fallback exists so the
-           * user gets an answer at all, not so they get the fastest one, so it
-           * takes the model's own default rather than insisting.
+           * Thinking is billed against the SAME budget as the answer, so a
+           * model that thinks needs room to think AND speak. Leaving the
+           * fallback on 1024 with thinking enabled produced a forty-second
+           * request that emitted nothing at all: the model spent the whole
+           * budget deliberating and finished on MAX_TOKENS with an empty
+           * message.
            */
-          ...(model === MODEL || THINKING_BUDGET > 0
-            ? { thinkingConfig: { thinkingBudget: THINKING_BUDGET } }
-            : {}),
+          maxOutputTokens: model === MODEL ? 1024 : 2048,
+          /*
+           * And not every model will let thinking be switched off at all --
+           * gemini-3.6-flash answers 400 to a budget of zero. The fallback
+           * therefore gets a small positive budget rather than none, which it
+           * accepts, instead of the primary's zero which it does not.
+           */
+          thinkingConfig: {
+            thinkingBudget:
+              model === MODEL ? THINKING_BUDGET : Math.max(THINKING_BUDGET, 128),
+          },
         },
       }),
       signal,
