@@ -46,7 +46,16 @@ const STEP = 0.34;
 /** A chart is painted at 1024x640, so it always hangs in that proportion. */
 const CHART_ASPECT = 1024 / 640;
 
-export function MediaFrame({ item, index }: { item: MediaItem; index: number }) {
+export function MediaFrame({
+  item,
+  index,
+  retiring = false,
+}: {
+  item: MediaItem;
+  index: number;
+  /** Belongs to a finished topic: shrink away rather than linger behind. */
+  retiring?: boolean;
+}) {
   const group = useRef<Group>(null);
   const plane = useRef<Mesh>(null);
   const border = useRef<ShaderMaterial>(null);
@@ -55,7 +64,7 @@ export function MediaFrame({ item, index }: { item: MediaItem; index: number }) 
   const setAspect = useMediaStore((s) => s.setAspect);
   const [revealStep, setRevealStep] = useState(0);
 
-  const focused = index === 0;
+  const focused = index === 0 && !retiring;
 
   /*
    * Charts draw themselves, so they need no loader -- but they do need to grow
@@ -170,9 +179,17 @@ export function MediaFrame({ item, index }: { item: MediaItem; index: number }) 
     }
 
     // Stacked frames sit back and to the side, dimmer and smaller.
-    motion.position.set(index * 0.42, -index * 0.12, -index * STEP);
-    motion.scale.set(focused ? 1 : 0.86 - index * 0.05);
-    motion.opacity.set(focused ? 1 : 0.42 - index * 0.12);
+    if (retiring) {
+      // Down and back, to nothing. The spring makes it read as stepping away
+      // rather than being switched off.
+      motion.position.set(index * 0.3, -0.5, -index * STEP - 1.1);
+      motion.scale.set(0.5);
+      motion.opacity.set(0);
+    } else {
+      motion.position.set(index * 0.42, -index * 0.12, -index * STEP);
+      motion.scale.set(focused ? 1 : 0.86 - index * 0.05);
+      motion.opacity.set(focused ? 1 : 0.42 - index * 0.12);
+    }
     motion.position.update(dt);
     motion.scale.update(dt);
     motion.opacity.update(dt);

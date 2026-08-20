@@ -28,6 +28,7 @@ const STAGE_Y = 0.5;
 export function MediaStage() {
   const group = useRef<Group>(null);
   const stack = useMediaStore((s) => s.stack);
+  const retiring = useMediaStore((s) => s.retiring);
   const expandedId = useCarouselStore((s) => s.expandedId);
 
   const motion = useMemo(
@@ -56,15 +57,20 @@ export function MediaStage() {
 
     group.current.position.set(motion.x.value, motion.y.value, motion.z.value);
     group.current.rotation.y = expandedId ? 0.2 : 0;
-    group.current.visible = stack.length > 0;
+    group.current.visible = stack.length + retiring.length > 0;
   });
 
-  if (stack.length === 0) return null;
+  if (stack.length === 0 && retiring.length === 0) return null;
 
   return (
     <group ref={group} name="media-stage">
       {stack.map((item, index) => (
         <MediaFrame key={item.id} item={item} index={index} />
+      ))}
+
+      {/* On their way out: behind everything, shrinking, not interactive. */}
+      {retiring.map((item, index) => (
+        <MediaFrame key={item.id} item={item} index={stack.length + index} retiring />
       ))}
     </group>
   );

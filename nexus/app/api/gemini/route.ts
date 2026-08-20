@@ -191,6 +191,7 @@ async function runTurn(
     GROUNDING,
     mayCallTools,
     session,
+    depth === 0,
   );
 
   if (!upstream.ok || !upstream.body) {
@@ -300,6 +301,14 @@ async function callGemini(
   grounded: boolean,
   mayCallTools: boolean,
   session: Session,
+  /**
+   * Only the opening turn may change model. After it, `contents` carries
+   * thoughtSignatures minted by the model that produced them, and those are
+   * opaque and model-specific -- replaying one to a different model is
+   * answered with INVALID_ARGUMENT, which is a worse failure than the
+   * saturation it was trying to route around.
+   */
+  mayFallBack: boolean,
 ): Promise<Response> {
   const tools: unknown[] = [];
   if (mayCallTools) {
@@ -335,7 +344,12 @@ async function callGemini(
     });
 
   const primary = await withRetry(() => send(session.model), signal);
-  if (!RETRY_STATUS.has(primary.status) || session.fellBack || session.model === FALLBACK_MODEL) {
+  if (
+    !RETRY_STATUS.has(primary.status) ||
+    !mayFallBack ||
+    session.fellBack ||
+    session.model === FALLBACK_MODEL
+  ) {
     return primary;
   }
 

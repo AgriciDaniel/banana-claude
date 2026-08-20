@@ -3,6 +3,7 @@ import { useAssistantStore, nextMessageId } from '@/stores/useAssistantStore';
 import { executeCommand } from './commands';
 import { bus } from '@/stores/bus';
 import { gestureSnapshot, interaction } from '@/stores/runtime';
+import { useMediaStore } from '@/stores/useMediaStore';
 import { rehearse, SCENARIOS } from '@/gesture/devScenarios';
 import {
   startRecording,
@@ -44,6 +45,12 @@ export interface DevBridge {
   rehearse: (scenario: string) => Promise<boolean>;
   /** Names of every available rehearsal. */
   scenarios: () => string[];
+  /** What is on display, and which question each panel belongs to. */
+  media: () => {
+    topic: number;
+    stack: Array<{ title: string; topic: number }>;
+    retiring: Array<{ title: string; topic: number }>;
+  };
   /** Capture live landmarks under a label, for tuning against a real hand. */
   record: (label: string, ms: number) => void;
   /** Retrieve a capture. */
@@ -93,6 +100,9 @@ export function installDevBridge(): () => void {
     simulate: (text, wordsPerSecond = 6) => {
       window.clearInterval(timer);
       const store = useAssistantStore.getState();
+      // A simulated turn is still a turn: it opens a topic, or the display
+      // would behave differently under simulation than in real use.
+      useMediaStore.getState().beginTopic();
       store.setAwake(true);
       // Fire the real wake signal so the wave and the glow are exercised too,
       // not just the text.
@@ -148,6 +158,15 @@ export function installDevBridge(): () => void {
 
     rehearse: (scenario) => rehearse(scenario),
     scenarios: () => Object.keys(SCENARIOS),
+
+    media: () => {
+      const s = useMediaStore.getState();
+      const brief = (m: { title?: string; kind: string; topic: number }) => ({
+        title: m.title ?? m.kind,
+        topic: m.topic,
+      });
+      return { topic: s.topic, stack: s.stack.map(brief), retiring: s.retiring.map(brief) };
+    },
     record: (label, ms) => startRecording(label, ms),
     take: (label) => takeRecording(label),
     takes: () => recordingLabels(),

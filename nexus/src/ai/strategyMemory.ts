@@ -30,6 +30,10 @@ export interface Proposal {
   /** What it was being measured against. */
   benchmark?: { value: number; label?: string };
   source?: string;
+  /** A plan's actions, so a later session can ask where they got to. */
+  steps?: string[];
+  /** What the plan was meant to move, and how far. */
+  target?: { metric: string; from: number; to: number; unit?: string };
 }
 
 const KEY = 'nexus.strategy.proposals';
@@ -66,10 +70,15 @@ function write(list: Proposal[]): void {
 export function rememberChart(spec: ChartSpec): void {
   if (!spec.note) return;
 
-  // A flow's points are steps, and its values are a rendering convenience.
-  // Recording one as a metric would file "publication: 1" as a measurement.
-  const quantified = spec.kind !== 'flow';
-  const mine = quantified ? (spec.points.find((p) => p.mine) ?? spec.points[0]) : undefined;
+  /*
+   * Only record a figure that is genuinely the user's own. A flow's values are
+   * a rendering convenience, a plan's are week numbers, and a playbook's are
+   * other people's channels -- filing any of those as "your metric" would put
+   * a number in the record that means nothing, and the whole point of the
+   * record is that a later session can compare against it.
+   */
+  const mine =
+    spec.points.find((p) => p.mine) ?? (spec.kind === 'kpi' ? spec.points[0] : undefined);
 
   const entry: Proposal = {
     at: Date.now(),
@@ -81,6 +90,8 @@ export function rememberChart(spec: ChartSpec): void {
         ? { value: spec.benchmark, label: spec.benchmarkLabel }
         : undefined,
     source: spec.source,
+    steps: spec.steps && spec.steps.length > 0 ? spec.steps.slice(0, 5) : undefined,
+    target: spec.target,
   };
 
   const list = read().filter(
@@ -123,7 +134,14 @@ export function proposalLines(locale: string, max = 6): string[] {
     if (p.benchmark) {
       parts.push(`measured against ${p.benchmark.value} (${p.benchmark.label ?? 'reference'})`);
     }
+    if (p.target) {
+      const unit = p.target.unit ? (p.target.unit === '%' ? '%' : ` ${p.target.unit}`) : '';
+      parts.push(
+        `the plan aimed to take ${p.target.metric} from ${p.target.from}${unit} to ${p.target.to}${unit}`,
+      );
+    }
     parts.push(`proposed: ${p.action}`);
+    if (p.steps) parts.push(`steps were: ${p.steps.join(' / ')}`);
     return parts.join('; ');
   });
 }

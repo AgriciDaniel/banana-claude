@@ -74,6 +74,7 @@ function paint(spec: ChartSpec, reveal: number): Texture {
   else if (spec.kind === 'funnel') funnel(ctx, spec, plot, reveal);
   else if (spec.kind === 'flow') flow(ctx, spec, plot, reveal);
   else if (spec.kind === 'playbook') playbook(ctx, spec, plot, reveal);
+  else if (spec.kind === 'plan') plan(ctx, spec, plot, reveal);
   else kpi(ctx, spec, plot, reveal);
 
   const texture = new CanvasTexture(canvas);
@@ -358,6 +359,8 @@ function format(value: number, unit?: string): string {
   if (abs >= 1_000_000) text = `${(value / 1_000_000).toFixed(1)}M`;
   else if (abs >= 10_000) text = `${(value / 1000).toFixed(0)}K`;
   else if (abs >= 100) text = value.toFixed(0);
+  // A count is a whole thing. "51.0 abonnes" reads as a measurement error.
+  else if (Number.isInteger(value)) text = String(value);
   else if (abs >= 10) text = value.toFixed(1);
   else text = value.toFixed(abs < 1 ? 2 : 1);
   return unit ? (unit === '%' ? `${text}%` : `${text} ${unit}`) : text;
@@ -589,4 +592,102 @@ function playbook(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, re
     lines.forEach((text, k) => ctx.fillText(text, x, y + k * 26));
     ctx.globalAlpha = 1;
   });
+}
+
+/**
+ * A plan: what to do, in what order, and what proves it worked.
+ *
+ * Laid out along a spine because sequence is the substance of a plan -- the
+ * same four actions in the wrong order is a different and usually worse plan.
+ * Each point's value is its horizon, so "2" means the second week; the labels
+ * carry the action itself.
+ *
+ * The target sits at the end of the spine, as a from/to. A plan whose result
+ * cannot be checked is a wish list, and the next conversation is precisely
+ * where that check has to be possible.
+ */
+function plan(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal: number) {
+  const steps = spec.points.slice(0, 5);
+  if (steps.length === 0) return;
+
+  const spineY = plot.y + 46;
+  const usable = spec.target ? plot.w - 230 : plot.w;
+  const gap = usable / steps.length;
+
+  ctx.strokeStyle = 'rgba(99,201,255,0.24)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(plot.x, spineY);
+  ctx.lineTo(plot.x + usable * Math.min(1, reveal * 1.2), spineY);
+  ctx.stroke();
+
+  steps.forEach((step, i) => {
+    const shown = Math.min(1, Math.max(0, reveal * steps.length - i));
+    if (shown <= 0) return;
+    ctx.globalAlpha = shown;
+    const x = plot.x + i * gap + 8;
+
+    ctx.fillStyle = PALETTE.signal;
+    ctx.beginPath();
+    ctx.arc(x, spineY, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // The horizon, which is the half of a plan people skip.
+    ctx.fillStyle = PALETTE.ember;
+    ctx.font = `600 17px ${MONO}`;
+    const when = step.value > 0 ? `S${Math.round(step.value)}` : 'MAINTENANT';
+    ctx.fillText(when, x - 4, spineY - 20);
+
+    ctx.fillStyle = PALETTE.lumen;
+    ctx.font = `500 20px ${SANS}`;
+    // Six lines at this width fits an action written as a full instruction,
+    // which is the only kind worth putting on a plan.
+    const lines = wrap(ctx, step.label, gap - 22).slice(0, 6);
+    lines.forEach((text, k) => ctx.fillText(text, x - 4, spineY + 38 + k * 25));
+    ctx.globalAlpha = 1;
+  });
+
+  if (!spec.target) return;
+
+  const boxX = plot.x + usable + 26;
+  const boxW = plot.w - usable - 26;
+  ctx.fillStyle = 'rgba(79,224,196,0.08)';
+  round(ctx, boxX, spineY - 34, boxW, 128, 12);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(79,224,196,0.35)';
+  ctx.lineWidth = 1.5;
+  round(ctx, boxX, spineY - 34, boxW, 128, 12);
+  ctx.stroke();
+
+  ctx.fillStyle = PALETTE.ghost;
+  ctx.font = `600 16px ${MONO}`;
+  ctx.fillText('CE QUI DOIT BOUGER', boxX + 16, spineY - 12);
+
+  ctx.fillStyle = PALETTE.lumen;
+  ctx.font = `500 19px ${SANS}`;
+  ctx.fillText(clip(ctx, spec.target.metric, boxW - 32), boxX + 16, spineY + 14);
+
+  /*
+   * The unit is written once, on the destination. Repeating it on both sides
+   * doubled the width of the line for no added meaning, and "51 abo > 250 ab"
+   * -- clipped mid-word at the box edge -- is worse than either.
+   */
+  const from = format(spec.target.from);
+  const to = format(spec.target.to, spec.target.unit);
+  const arrow = ' › ';
+
+  // Shrink to fit rather than clip: this line is the promise being made.
+  let size = 30;
+  do {
+    ctx.font = `700 ${size}px ${MONO}`;
+    if (ctx.measureText(from + arrow + to).width <= boxW - 32) break;
+    size -= 2;
+  } while (size > 18);
+
+  ctx.fillStyle = PALETTE.ghost;
+  ctx.fillText(from, boxX + 16, spineY + 56);
+  const fromW = ctx.measureText(from).width;
+
+  ctx.fillStyle = PALETTE.lock;
+  ctx.fillText(arrow + to, boxX + 16 + fromW, spineY + 56);
 }

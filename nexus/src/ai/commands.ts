@@ -126,9 +126,9 @@ export const COMMAND_DECLARATIONS = [
       properties: {
         kind: {
           type: 'STRING',
-          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook'],
+          enum: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan'],
           description:
-            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps.',
+            'bar to compare things, line for a trend over time, donut for a breakdown of a whole, kpi for one headline number, funnel for stages losing volume (order the points from widest to narrowest), flow for the steps of a method (labels only, pass value 1), playbook to put what works on other channels beside what we do about it - pass the reference channels as points and the transposition as steps. plan for an action plan: each point is one action, its value is the week it happens in, and "target" says which number should move and how far.',
         },
         title: { type: 'STRING', description: 'The claim the chart makes, in a few words.' },
         source: {
@@ -160,6 +160,18 @@ export const COMMAND_DECLARATIONS = [
           description:
             'playbook only: up to four actions on OUR subject, derived from the reference points. Each one concrete enough to start this week.',
           items: { type: 'STRING' },
+        },
+        target: {
+          type: 'OBJECT',
+          description:
+            'plan only: what the plan is meant to move. Required for a plan - without it there is no way to tell later whether it worked.',
+          properties: {
+            metric: { type: 'STRING', description: 'Name of the number, e.g. "vues par abonne".' },
+            from: { type: 'NUMBER', description: 'Where it stands today.' },
+            to: { type: 'NUMBER', description: 'Where it should stand at the end.' },
+            unit: { type: 'STRING' },
+          },
+          required: ['metric', 'from', 'to'],
         },
         note: {
           type: 'STRING',
@@ -361,7 +373,8 @@ export function executeCommand(call: CommandCall): CommandResult {
        * the chart empty and the request silently refused, so the value is
        * supplied instead of demanded.
        */
-      const stepsOnly = call.args.kind === 'flow' || call.args.kind === 'playbook';
+      const stepsOnly =
+        call.args.kind === 'flow' || call.args.kind === 'playbook' || call.args.kind === 'plan';
       const points = raw
         .map((p) => p as { label?: unknown; value?: unknown; mine?: unknown })
         .filter((p) => stepsOnly || (typeof p.value === 'number' && Number.isFinite(p.value)))
@@ -377,7 +390,7 @@ export function executeCommand(call: CommandCall): CommandResult {
       }
       const kind = String(call.args.kind ?? 'bar') as ChartSpec['kind'];
       const spec: ChartSpec = {
-        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook'].includes(kind)
+        kind: ['bar', 'line', 'donut', 'kpi', 'funnel', 'flow', 'playbook', 'plan'].includes(kind)
           ? kind
           : 'bar',
         title: String(call.args.title ?? '').slice(0, 90) || 'Sans titre',
@@ -393,6 +406,7 @@ export function executeCommand(call: CommandCall): CommandResult {
             ? call.args.benchmarkLabel.slice(0, 28)
             : undefined,
         note: typeof call.args.note === 'string' ? call.args.note.slice(0, 160) : undefined,
+        target: readTarget(call.args.target),
         steps: Array.isArray(call.args.steps)
           ? call.args.steps.map((x) => String(x).slice(0, 120)).slice(0, 4)
           : undefined,
@@ -490,5 +504,20 @@ export function readSceneContext() {
     // Carried on every turn so an analysis can build on the last one rather
     // than starting the same diagnosis over.
     proposals: proposalLines(useLocaleStore.getState().locale),
+  };
+}
+
+/** A plan's target, kept only when all three parts are actually present. */
+function readTarget(raw: unknown): ChartSpec['target'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const t = raw as { metric?: unknown; from?: unknown; to?: unknown; unit?: unknown };
+  if (typeof t.metric !== 'string') return undefined;
+  if (typeof t.from !== 'number' || !Number.isFinite(t.from)) return undefined;
+  if (typeof t.to !== 'number' || !Number.isFinite(t.to)) return undefined;
+  return {
+    metric: t.metric.slice(0, 60),
+    from: t.from,
+    to: t.to,
+    unit: typeof t.unit === 'string' ? t.unit.slice(0, 8) : undefined,
   };
 }

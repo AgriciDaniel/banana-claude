@@ -3,6 +3,7 @@ import { Speaker } from '@/voice/Speaker';
 import { streamGenerate, probeAssistant, probeVoice } from './GeminiClient';
 import { executeCommand, readSceneContext } from './commands';
 import { stripWakePhrase } from './prompt';
+import { useMediaStore } from '@/stores/useMediaStore';
 import { useAssistantStore, nextMessageId } from '@/stores/useAssistantStore';
 import { bus } from '@/stores/bus';
 import { log } from '@/stores/useLogStore';
@@ -200,6 +201,13 @@ export class AssistantEngine {
     window.clearTimeout(this.sleepTimer);
 
     store.pushUser(prompt);
+    /*
+     * A new question opens a new topic for the display. Nothing is cleared
+     * here: panels only stand down once this turn actually produces something
+     * to replace them, so a follow-up that draws nothing leaves the user
+     * looking at what they were already looking at.
+     */
+    useMediaStore.getState().beginTopic();
     store.setTranscript(prompt, true);
     store.setError(null);
     store.setStatus('thinking');

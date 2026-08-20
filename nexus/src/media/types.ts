@@ -46,7 +46,15 @@ export interface ShapeSpec {
  * chart is expected to carry a source, because a figure with no provenance is
  * not evidence.
  */
-export type ChartKind = 'bar' | 'line' | 'donut' | 'kpi' | 'funnel' | 'flow' | 'playbook';
+export type ChartKind =
+  | 'bar'
+  | 'line'
+  | 'donut'
+  | 'kpi'
+  | 'funnel'
+  | 'flow'
+  | 'playbook'
+  | 'plan';
 
 export interface ChartPoint {
   label: string;
@@ -75,6 +83,13 @@ export interface ChartSpec {
    * one list is what turns a scenario back into a list of tips.
    */
   steps?: string[];
+  /**
+   * Plan only: what the plan is trying to move, where it stands now, and
+   * where it should stand by the end. A plan without a number to check
+   * against is a wish list -- there is no way to tell later whether it
+   * worked, which is precisely what the next conversation needs to know.
+   */
+  target?: { metric: string; from: number; to: number; unit?: string };
 }
 
 export interface MediaItem {
@@ -90,6 +105,11 @@ export interface MediaItem {
   /** Where this came from, for the log and the HUD. */
   origin: 'assistant' | 'module' | 'generated' | 'user';
   at: number;
+  /**
+   * Which question this belongs to. Frames from an earlier topic stand down
+   * when new media arrives, and are never promoted back to centre stage.
+   */
+  topic: number;
   /** Natural aspect ratio, filled in once the texture loads. */
   aspect?: number;
 }
