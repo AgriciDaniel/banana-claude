@@ -98,6 +98,14 @@ export interface ChartSpec {
    * than a strained use of `points`.
    */
   facts?: Array<{ label: string; value: string }>;
+  /**
+   * Profile only: the reading, as opposed to the record. Kept in their own
+   * fields and drawn in their own band because a strength is a judgement and a
+   * date of birth is not -- mixing the two would let an opinion borrow the
+   * authority of a looked-up fact.
+   */
+  strengths?: string[];
+  weaknesses?: string[];
 }
 
 export interface MediaItem {

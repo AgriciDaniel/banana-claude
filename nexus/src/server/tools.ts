@@ -1,5 +1,7 @@
 import { scanChannels } from './providers/youtube';
 import { findPhoto } from './photo';
+import { findFacts } from './facts';
+import { RateLimited } from './wikimedia';
 
 /**
  * Tools the SERVER runs, as distinct from commands the interface performs.
@@ -39,6 +41,21 @@ export const SERVER_TOOL_DECLARATIONS = [
         },
       },
       required: ['theme'],
+    },
+  },
+  {
+    name: 'research_subject',
+    description:
+      "Look up a subject -- a person, a club, a place, a company, a work -- and get back its photograph AND its structured facts in one call: what it is, the properties that characterise it, and the honours or awards it holds. Everything returned has been fetched from Wikidata and Wikipedia, not recalled, so it can be shown as fact. ALWAYS call this before describing a subject you do not have live module data for. Use the result to fill a show_chart profile.",
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        subject: {
+          type: 'STRING',
+          description: 'Who or what, named plainly: "Ousmane Dembele", "Stade Velodrome", "Peugeot 3008".',
+        },
+      },
+      required: ['subject'],
     },
   },
   {
@@ -103,6 +120,55 @@ export async function runServerTool(
         })),
         howToRead:
           'viewsPerSubscriber above 0.2 means the channel reaches past its own audience. typicalLengthSeconds and shortsShare describe the format that is working. bestRecentTitles are the actual patterns to study - quote them. Two caveats you must respect: a Short counts a view every time it starts or replays, so view figures from a channel with a high shortsShare are not comparable like-for-like with a long-form channel and you should say so rather than ranking them together silently; and subscriber counts are rounded to three significant figures at source, so treat small differences in the ratio as noise.',
+      };
+    }
+
+    if (name === 'research_subject') {
+      const subject = String(args.subject ?? '').trim();
+      /*
+       * Photograph and facts are fetched together because they are always
+       * wanted together, and because two separate tool calls cost two round
+       * trips through the model for one question.
+       */
+      let throttled = false;
+      const remember = (error: unknown) => {
+        if (error instanceof RateLimited) throttled = true;
+        return null;
+      };
+      const [photo, facts] = await Promise.all([
+        findPhoto(subject, signal).catch(remember),
+        findFacts(subject, signal).catch(remember),
+      ]);
+
+      if (!photo && !facts) {
+        /*
+         * Being throttled is not the same as finding nothing, and the model
+         * will say one or the other aloud. Wikimedia limits hard enough that
+         * a few lookups in a row can trip it, so the two are kept apart.
+         */
+        if (throttled) {
+          return {
+            ok: false,
+            error: 'Wikipedia is rate limiting us right now. Say the lookup is temporarily unavailable and offer to try again in a moment - do NOT say the subject was not found.',
+          };
+        }
+        return {
+          ok: true,
+          found: false,
+          note: `Nothing was found for "${subject}". Say so plainly rather than filling the panel from memory.`,
+        };
+      }
+
+      return {
+        ok: true,
+        found: true,
+        title: facts?.title ?? photo?.title ?? subject,
+        what: facts?.description,
+        photoUrl: photo?.url,
+        facts: facts?.facts ?? [],
+        honours: facts?.honours ?? [],
+        source: [facts ? 'Wikidata' : null, photo?.source].filter(Boolean).join(' + '),
+        note: 'These facts were fetched, not remembered: show them as they are and cite the source. Anything you add beyond them -- strengths, weaknesses, form, an opinion -- is YOUR reading and must be presented as such, never mixed into the fact list.',
       };
     }
 

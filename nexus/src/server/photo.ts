@@ -11,6 +11,8 @@
  * worth counting, and the address comes from an API rather than from memory.
  */
 
+import { wikiJson } from './wikimedia';
+
 const LANGUAGES = ['fr', 'en'] as const;
 
 export interface FoundPhoto {
@@ -37,12 +39,8 @@ async function resolveTitle(
   const url =
     `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&format=json` +
     `&srlimit=1&srsearch=${encodeURIComponent(subject)}&origin=*`;
-  const response = await fetch(url, { signal, headers: { accept: 'application/json' } });
-  if (!response.ok) return null;
-  const data = (await response.json()) as {
-    query?: { search?: Array<{ title?: string }> };
-  };
-  return data.query?.search?.[0]?.title ?? null;
+  const data = await wikiJson<{ query?: { search?: Array<{ title?: string }> } }>(url, signal);
+  return data?.query?.search?.[0]?.title ?? null;
 }
 
 export async function findPhoto(
@@ -56,13 +54,11 @@ export async function findPhoto(
     const title = await resolveTitle(lang, query, signal);
     if (!title) continue;
 
-    const response = await fetch(
+    const summary = await wikiJson<Summary>(
       `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-      { signal, headers: { accept: 'application/json' } },
+      signal,
     );
-    if (!response.ok) continue;
-
-    const summary = (await response.json()) as Summary;
+    if (!summary) continue;
     /*
      * `originalimage` is the full-resolution file and `thumbnail` a scaled
      * one. The thumbnail is preferred when the original is enormous, since a

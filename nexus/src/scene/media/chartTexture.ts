@@ -703,8 +703,33 @@ function plan(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal
  * them into one list makes both harder to scan.
  */
 function profile(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, reveal: number) {
-  const facts = (spec.facts ?? []).slice(0, 6);
-  const honours = (spec.steps ?? []).slice(0, 6);
+  const strengths = (spec.strengths ?? []).slice(0, 3);
+  const weaknesses = (spec.weaknesses ?? []).slice(0, 3);
+  const judged = strengths.length + weaknesses.length > 0;
+
+  /*
+   * The record above, the reading below, with a rule between them. The line is
+   * the honest part of this layout: everything over it was fetched, everything
+   * under it is an opinion, and the panel should not let the second borrow the
+   * authority of the first.
+   */
+  /*
+   * The record's height is measured from what it holds, not taken as a
+   * fraction of the panel. A fixed share let a fourth fact run straight
+   * through the heading of the band below it.
+   */
+  const FACT_STEP = 48;
+  const JUDGED_STEP = 40;
+  // Heading, then one row per line. The rule above the band is its own
+  // separation, so no further gap is reserved on top of this.
+  const assessH = judged ? 34 + Math.max(strengths.length, weaknesses.length) * JUDGED_STEP : 0;
+
+  const room = plot.h - assessH;
+  const maxRows = Math.max(1, Math.floor((room - 34) / FACT_STEP) + 1);
+
+  const facts = (spec.facts ?? []).slice(0, Math.min(6, maxRows));
+  const honours = (spec.steps ?? []).slice(0, Math.min(6, maxRows));
+  const recordH = 30 + Math.max(facts.length, honours.length) * FACT_STEP;
   const split = honours.length > 0 ? plot.x + plot.w * 0.46 : plot.x + plot.w;
 
   if (honours.length > 0) {
@@ -714,7 +739,7 @@ function profile(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, rev
     ctx.setLineDash([5, 9]);
     ctx.beginPath();
     ctx.moveTo(split + 16, plot.y - 18);
-    ctx.lineTo(split + 16, plot.y + plot.h);
+    ctx.lineTo(split + 16, plot.y + recordH - 14);
     ctx.stroke();
     ctx.restore();
   }
@@ -723,7 +748,7 @@ function profile(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, rev
     const shown = Math.min(1, Math.max(0, reveal * 2 - i * 0.12));
     if (shown <= 0) return;
     ctx.globalAlpha = shown;
-    const y = plot.y + 22 + i * 52;
+    const y = plot.y + 22 + i * FACT_STEP;
 
     ctx.fillStyle = PALETTE.ghost;
     ctx.font = `500 17px ${MONO}`;
@@ -734,6 +759,8 @@ function profile(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, rev
     ctx.fillText(clip(ctx, fact.value, split - plot.x - 20), plot.x, y + 27);
     ctx.globalAlpha = 1;
   });
+
+  if (judged) assessment(ctx, spec, plot, plot.y + recordH + 22, reveal);
 
   if (honours.length === 0) return;
 
@@ -746,7 +773,7 @@ function profile(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, rev
     const shown = Math.min(1, Math.max(0, reveal * 2 - 0.3 - i * 0.12));
     if (shown <= 0) return;
     ctx.globalAlpha = shown;
-    const y = plot.y + 22 + i * 50;
+    const y = plot.y + 22 + i * FACT_STEP;
 
     ctx.fillStyle = PALETTE.lock;
     ctx.beginPath();
@@ -759,4 +786,56 @@ function profile(ctx: CanvasRenderingContext2D, spec: ChartSpec, plot: Plot, rev
     lines.forEach((text, k) => ctx.fillText(text, x, y + k * 24));
     ctx.globalAlpha = 1;
   });
+}
+
+/** The reading: what is strong, what is not, drawn below the record. */
+function assessment(
+  ctx: CanvasRenderingContext2D,
+  spec: ChartSpec,
+  plot: Plot,
+  top: number,
+  reveal: number,
+) {
+  const strengths = (spec.strengths ?? []).slice(0, 3);
+  const weaknesses = (spec.weaknesses ?? []).slice(0, 3);
+  if (strengths.length + weaknesses.length === 0) return;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(99,201,255,0.16)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(plot.x, top - 26);
+  ctx.lineTo(plot.x + plot.w, top - 26);
+  ctx.stroke();
+  ctx.restore();
+
+  const half = plot.w / 2;
+  const columns: Array<{ title: string; lines: string[]; colour: string; x: number }> = [
+    { title: 'POINTS FORTS', lines: strengths, colour: PALETTE.lock, x: plot.x },
+    { title: 'LIMITES', lines: weaknesses, colour: PALETTE.ember, x: plot.x + half },
+  ];
+
+  for (const column of columns) {
+    if (column.lines.length === 0) continue;
+
+    ctx.fillStyle = PALETTE.ghost;
+    ctx.font = `600 16px ${MONO}`;
+    ctx.fillText(column.title, column.x, top);
+
+    column.lines.forEach((line, i) => {
+      const shown = Math.min(1, Math.max(0, reveal * 2 - 0.8 - i * 0.1));
+      if (shown <= 0) return;
+      ctx.globalAlpha = shown;
+      const y = top + 30 + i * 40;
+
+      ctx.fillStyle = column.colour;
+      ctx.fillRect(column.x, y - 11, 3, 14);
+
+      ctx.fillStyle = PALETTE.lumen;
+      ctx.font = `500 19px ${SANS}`;
+      const wrapped = wrap(ctx, line, half - 34).slice(0, 2);
+      wrapped.forEach((text, k) => ctx.fillText(text, column.x + 14, y + k * 21));
+      ctx.globalAlpha = 1;
+    });
+  }
 }

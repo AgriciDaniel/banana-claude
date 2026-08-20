@@ -171,6 +171,18 @@ export const COMMAND_DECLARATIONS = [
             required: ['label', 'value'],
           },
         },
+        strengths: {
+          type: 'ARRAY',
+          description:
+            'profile only: up to three strong points. This is YOUR reading, not a looked-up fact, and it is drawn below a dividing rule to say so.',
+          items: { type: 'STRING' },
+        },
+        weaknesses: {
+          type: 'ARRAY',
+          description:
+            'profile only: up to three limits or weak points, judged as fairly as the strengths. A profile with only strengths is advertising.',
+          items: { type: 'STRING' },
+        },
         target: {
           type: 'OBJECT',
           description:
@@ -403,7 +415,10 @@ export function executeCommand(call: CommandCall): CommandResult {
       const hasContent =
         points.length > 0 ||
         (call.args.kind === 'profile' &&
-          (Array.isArray(call.args.facts) || Array.isArray(call.args.steps)));
+          (Array.isArray(call.args.facts) ||
+            Array.isArray(call.args.steps) ||
+            Array.isArray(call.args.strengths) ||
+            Array.isArray(call.args.weaknesses)));
 
       if (!hasContent) {
         result = fail('a chart needs at least one point with a numeric value');
@@ -431,6 +446,8 @@ export function executeCommand(call: CommandCall): CommandResult {
         note: typeof call.args.note === 'string' ? call.args.note.slice(0, 160) : undefined,
         target: readTarget(call.args.target),
         facts: readFacts(call.args.facts),
+        strengths: readLines(call.args.strengths),
+        weaknesses: readLines(call.args.weaknesses),
         steps: Array.isArray(call.args.steps)
           ? call.args.steps.map((x) => String(x).slice(0, 120)).slice(0, 4)
           : undefined,
@@ -558,4 +575,14 @@ function readFacts(raw: unknown): ChartSpec['facts'] {
       value: String(entry.value).slice(0, 46),
     }));
   return facts.length > 0 ? facts : undefined;
+}
+
+/** A short list of plain lines, trimmed to what a panel can hold. */
+function readLines(raw: unknown, max = 3): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const lines = raw
+    .filter((entry) => typeof entry === 'string' && entry.trim().length > 0)
+    .slice(0, max)
+    .map((entry) => String(entry).slice(0, 110));
+  return lines.length > 0 ? lines : undefined;
 }
