@@ -21,10 +21,12 @@ import { interaction } from '@/stores/runtime';
 import { envRuntime } from '@/stores/useEnvironmentStore';
 import { useMediaStore } from '@/stores/useMediaStore';
 import { getChartTexture, REVEAL_STEPS } from './chartTexture';
+import { getCloseTexture } from './closeTexture';
 import { Spring, Spring3 } from '@/animation/Spring';
 import { SPRINGS } from '@/animation/presets';
 import type { MediaItem } from '@/media/types';
 import { ShapeView } from './ShapeView';
+import { getAudio } from '@/audio/AudioEngine';
 
 /**
  * One piece of content, framed and floating.
@@ -40,6 +42,12 @@ import { ShapeView } from './ShapeView';
  */
 
 const WIDTH = 2.5;
+/**
+ * Nothing hangs taller than this, whatever its proportions. Set by the top of
+ * the viewport rather than by taste: a portrait photograph any taller pushes
+ * its own corner -- and the dismiss cross in it -- off the top of the screen.
+ */
+const MAX_HEIGHT = 1.8;
 /** Depth offsets for the stack behind the focused frame. */
 const STEP = 0.34;
 
@@ -62,6 +70,7 @@ export function MediaFrame({
   const [texture, setTexture] = useState<Texture | null>(null);
   const [failed, setFailed] = useState(false);
   const setAspect = useMediaStore((s) => s.setAspect);
+  const dismiss = useMediaStore((s) => s.dismiss);
   const currentTopic = useMediaStore((s) => s.topic);
   const [revealStep, setRevealStep] = useState(0);
 
@@ -145,12 +154,20 @@ export function MediaFrame({
   useEffect(() => () => texture?.dispose(), [texture]);
 
   const aspect = item.kind === 'chart' ? CHART_ASPECT : (item.aspect ?? 1);
-  const height = WIDTH / Math.max(0.4, Math.min(3, aspect));
+  /*
+   * Fit inside a box rather than always claiming the full width. A portrait
+   * photograph at 2.5 wide stands nearly four high and swallows the entire
+   * room -- the first press photo the assistant fetched covered every card in
+   * the ring. Tall pictures give up width instead.
+   */
+  const safe = Math.max(0.4, Math.min(3, aspect));
+  const height = Math.min(WIDTH / safe, MAX_HEIGHT);
+  const width = height * safe;
 
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
-      uSize: { value: { x: WIDTH, y: height } },
+      uSize: { value: { x: width, y: height } },
       uRadius: { value: 0.07 },
       uColor: { value: new Color(PALETTE.signal) },
       uAccent: { value: new Color(PALETTE.ember) },
@@ -162,7 +179,7 @@ export function MediaFrame({
       uRipple: { value: -1 },
       uRippleAt: { value: { x: 0.5, y: 0.5 } },
     }),
-    [height, aspect],
+    [width, height],
   );
 
   /** Arrives with a spring, like every other object here. */
@@ -246,7 +263,7 @@ export function MediaFrame({
         <ShapeView spec={item.shape} opacity={motion.opacity.value} />
       ) : (
         <mesh ref={plane}>
-          <planeGeometry args={[WIDTH, height]} />
+          <planeGeometry args={[width, height]} />
           <meshBasicMaterial
             map={chartTexture ?? texture ?? undefined}
             color={chartTexture || texture ? '#ffffff' : PALETTE.slate}
@@ -259,9 +276,46 @@ export function MediaFrame({
         </mesh>
       )}
 
+      {/*
+        * Dismiss, on the object itself. The HUD already has a clear control,
+        * but it clears everything and it is nowhere near the thing being
+        * looked at -- so the frame carries its own, in the corner, where a
+        * window's close button has always been.
+        *
+        * Only the frame in front gets one: a cross on a panel that is behind
+        * another, reduced, or already leaving would be aiming at a target
+        * that moves.
+        */}
+      {focused && !retiring && (
+        <mesh
+          name="media-close"
+          position={[width / 2 - 0.11, height / 2 - 0.11, 0.03]}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            dismiss(item.id);
+            getAudio().collapse();
+          }}
+          onPointerOver={() => {
+            document.body.style.cursor = 'pointer';
+          }}
+          onPointerOut={() => {
+            document.body.style.cursor = '';
+          }}
+        >
+          <planeGeometry args={[0.19, 0.19]} />
+          <meshBasicMaterial
+            map={getCloseTexture()}
+            transparent
+            opacity={motion.opacity.value}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+      )}
+
       {/* The same border every card wears. */}
       <mesh position={[0, 0, 0.012]}>
-        <planeGeometry args={[WIDTH * 1.05, height * 1.06]} />
+        <planeGeometry args={[width * 1.05, height * 1.06]} />
         <shaderMaterial
           ref={border}
           vertexShader={FRAME_VERT}

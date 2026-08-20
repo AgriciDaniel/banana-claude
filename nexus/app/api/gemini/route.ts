@@ -72,6 +72,8 @@ interface GeminiPart {
 
 interface GeminiCandidate {
   content?: { parts?: GeminiPart[]; role?: string };
+  /** STOP, MAX_TOKENS, SAFETY, RECITATION... Worth knowing when nothing came. */
+  finishReason?: string;
   groundingMetadata?: {
     groundingChunks?: Array<{ web?: { title?: string; uri?: string } }>;
   };
@@ -213,6 +215,8 @@ async function runTurn(
   let sentSources = false;
   let sentAnything = false;
   let sawError = false;
+  let finishReason = "";
+  const partKinds: string[] = [];
 
   await consume(upstream.body, (chunk) => {
     if (chunk.error?.message) {
@@ -222,7 +226,9 @@ async function runTurn(
     }
 
     const candidate = chunk.candidates?.[0];
+    if (candidate?.finishReason) finishReason = candidate.finishReason;
     for (const part of candidate?.content?.parts ?? []) {
+      partKinds.push(Object.keys(part).join("+"));
       // Everything is retained for the replay, including reasoning parts and
       // the server-side search traffic - Gemini validates the whole turn.
       modelParts.push(part);
@@ -266,6 +272,36 @@ async function runTurn(
    * what it is rather than swallowed.
    */
   if (!sentAnything && calls.length === 0 && !sawError && !signal.aborted) {
+    /*
+     * Worth saying out loud on the server: an empty turn is invisible from the
+     * client, and the reason it ended is the only thing that distinguishes
+     * "spent its budget thinking" from "declined" from "returned nothing at
+     * all". Guessing between those in an error message wastes the user's time.
+     */
+    console.warn(
+      `[gemini] empty turn on ${session.model}: finishReason=${finishReason || "none"} parts=${
+        partKinds.join(",") || "none"
+      }`,
+    );
+
+    /*
+     * A model can fail without failing. Grounded streaming on the newest flash
+     * model has been ending its stream after the search round-trips -- no
+     * text, no call, and no finishReason to admit it stopped early -- which a
+     * status check cannot see because the response is a perfectly good 200.
+     *
+     * So an empty opening turn is treated like the saturation it resembles,
+     * and the question is put to the fallback rather than returned as a
+     * failure. Only on the opening turn: past it, the history carries
+     * thoughtSignatures that belong to this model alone.
+     */
+    if (depth === 0 && !session.fellBack && session.model !== FALLBACK_MODEL) {
+      session.model = FALLBACK_MODEL;
+      session.fellBack = true;
+      await runTurn(contents, depth, send, key, system, signal, session);
+      return;
+    }
+
     send({
       type: "error",
       error: "The model returned an empty answer, most likely having spent its budget deliberating. Try asking again, or more narrowly.",
@@ -459,24 +495,46 @@ async function consume(
 
       let boundary = buffer.indexOf("\n\n");
       while (boundary !== -1) {
-        const frame = buffer.slice(0, boundary);
+        emit(buffer.slice(0, boundary), onChunk);
         buffer = buffer.slice(boundary + 2);
         boundary = buffer.indexOf("\n\n");
-
-        const line = frame.split("\n").find((l) => l.startsWith("data:"));
-        if (!line) continue;
-        const json = line.slice(5).trim();
-        if (!json || json === "[DONE]") continue;
-
-        try {
-          onChunk(JSON.parse(json) as GeminiChunk);
-        } catch {
-          /* a truncated frame is not worth killing the turn over */
-        }
       }
     }
+
+    /*
+     * Whatever is left when the stream closes is a frame too.
+     *
+     * Dropping it was the cause of the assistant's intermittent silences. A
+     * response does not have to end with a blank line, and Gemini's last frame
+     * is the one carrying the final text, the function call and the finish
+     * reason -- so losing it left a turn holding nothing but the search
+     * traffic that preceded it, and no finishReason to explain itself. It
+     * looked exactly like a model that had answered nothing.
+     */
+    if (buffer.trim().length > 0) emit(buffer, onChunk);
   } finally {
     reader.releaseLock();
+  }
+}
+
+/**
+ * One SSE frame. A single event may carry several `data:` lines, which the
+ * specification says to join before parsing -- taking only the first would
+ * truncate any frame Gemini chose to split.
+ */
+function emit(frame: string, onChunk: (chunk: GeminiChunk) => void): void {
+  const json = frame
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim())
+    .join("");
+
+  if (!json || json === "[DONE]") return;
+
+  try {
+    onChunk(JSON.parse(json) as GeminiChunk);
+  } catch {
+    /* a genuinely truncated frame is not worth killing the turn over */
   }
 }
 

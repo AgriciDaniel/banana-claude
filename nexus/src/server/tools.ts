@@ -1,4 +1,5 @@
 import { scanChannels } from './providers/youtube';
+import { findPhoto } from './photo';
 
 /**
  * Tools the SERVER runs, as distinct from commands the interface performs.
@@ -38,6 +39,21 @@ export const SERVER_TOOL_DECLARATIONS = [
         },
       },
       required: ['theme'],
+    },
+  },
+  {
+    name: 'find_photo',
+    description:
+      "Look up a real photograph of a real subject - a person, a place, a building, a team - and get back a URL that actually exists. ALWAYS use this before show_image for anything you do not already have a link for. Do not compose a Wikimedia address yourself: those paths are content hashes, they cannot be recalled, and a guessed one is a dead link that shows the user an empty frame.",
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        subject: {
+          type: 'STRING',
+          description: 'Who or what to find, named as plainly as possible: "Ousmane Dembele", "Stade de France".',
+        },
+      },
+      required: ['subject'],
     },
   },
 ] as const;
@@ -87,6 +103,27 @@ export async function runServerTool(
         })),
         howToRead:
           'viewsPerSubscriber above 0.2 means the channel reaches past its own audience. typicalLengthSeconds and shortsShare describe the format that is working. bestRecentTitles are the actual patterns to study - quote them. Two caveats you must respect: a Short counts a view every time it starts or replays, so view figures from a channel with a high shortsShare are not comparable like-for-like with a long-form channel and you should say so rather than ranking them together silently; and subscriber counts are rounded to three significant figures at source, so treat small differences in the ratio as noise.',
+      };
+    }
+
+    if (name === 'find_photo') {
+      const subject = String(args.subject ?? '').trim();
+      const found = await findPhoto(subject, signal);
+      if (!found) {
+        return {
+          ok: true,
+          found: false,
+          note: `No photograph was found for "${subject}". Say so plainly rather than composing a URL.`,
+        };
+      }
+      return {
+        ok: true,
+        found: true,
+        url: found.url,
+        title: found.title,
+        description: found.description,
+        source: found.source,
+        note: 'Pass this url to show_image unchanged. It has been looked up, not guessed.',
       };
     }
 
