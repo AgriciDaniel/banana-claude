@@ -15,9 +15,25 @@ import type { ChannelBenchmark, ModuleFeed, YoutubeData, YoutubeVideo } from '@/
 
 const API = 'https://www.googleapis.com/youtube/v3';
 
+/**
+ * Configuration, project-prefixed name first.
+ *
+ * `YOUTUBE_API_KEY` is a name other things on a machine also want, and Next
+ * will not override a variable that already exists in the environment -- so a
+ * stale one set globally silently wins over .env.local and the file appears to
+ * do nothing at all. That happened here, with a nine-character placeholder in
+ * the Windows user environment. The prefixed name is checked first because it
+ * is ours and nothing else will collide with it.
+ */
+function setting(name: string): string | null {
+  const prefixed = (process.env[`NEXUS_${name}`] ?? '').trim();
+  if (prefixed.length > 0) return prefixed;
+  const plain = (process.env[name] ?? '').trim();
+  return plain.length > 0 ? plain : null;
+}
+
 function key(): string | null {
-  const value = (process.env.YOUTUBE_API_KEY ?? '').trim();
-  return value.length > 0 ? value : null;
+  return setting('YOUTUBE_API_KEY');
 }
 
 /**
@@ -135,7 +151,7 @@ export async function fetchYoutube(
   signal: AbortSignal,
 ): Promise<ModuleFeed<YoutubeData>> {
   const apiKey = key();
-  const channel = (process.env.YOUTUBE_CHANNEL_ID ?? '').trim();
+  const channel = setting('YOUTUBE_CHANNEL_ID') ?? '';
 
   /*
    * Both caught before the request, so the panel names the actual problem
