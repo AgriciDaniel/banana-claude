@@ -34,6 +34,11 @@ const EMPTY = "";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.7-flash";
 /**
+ * Where a saturated primary goes. One version behind, and verified to serve
+ * the grounded streaming shape that the newest model was refusing.
+ */
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL ?? "gemini-3.6-flash";
+/**
  * Search grounding is ON by default. Half the questions this assistant exists
  * to answer - "how is Nvidia today", "latest AI news", "what is the weather" -
  * are worthless without live data, and a confidently stale number is worse
@@ -78,6 +83,21 @@ interface GeminiChunk {
 }
 
 type Content = { role: string; parts: unknown[] };
+
+/**
+ * Which model this request settled on.
+ *
+ * Sticky for the whole exchange, deliberately. Gemini 3 requires the opaque
+ * `thoughtSignature` from a model turn to be echoed back verbatim, and a
+ * signature minted by one model is not valid for another -- so falling back
+ * per call rather than per request produced a follow-up carrying the primary
+ * model's signature to the fallback, which answers INVALID_ARGUMENT. Once a
+ * conversation moves, it stays moved.
+ */
+interface Session {
+  model: string;
+  fellBack: boolean;
+}
 type Send = (payload: Record<string, unknown>) => void;
 
 export async function GET() {
@@ -125,7 +145,8 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        await runTurn(contents, 0, send, key, system, request.signal);
+        const session: Session = { model: MODEL, fellBack: false };
+        await runTurn(contents, 0, send, key, system, request.signal, session);
       } catch (error) {
         if (!request.signal.aborted) {
           send({
@@ -158,6 +179,7 @@ async function runTurn(
   key: string,
   system: string,
   signal: AbortSignal,
+  session: Session,
 ): Promise<void> {
   // Past the cap the model answers with words or not at all.
   const mayCallTools = depth < MAX_TOOL_DEPTH;
@@ -168,6 +190,7 @@ async function runTurn(
     signal,
     GROUNDING,
     mayCallTools,
+    session,
   );
 
   if (!upstream.ok || !upstream.body) {
@@ -265,16 +288,18 @@ async function runTurn(
     key,
     system,
     signal,
+    session,
   );
 }
 
-function callGemini(
+async function callGemini(
   contents: Content[],
   key: string,
   system: string,
   signal: AbortSignal,
   grounded: boolean,
-  mayCallTools = true,
+  mayCallTools: boolean,
+  session: Session,
 ): Promise<Response> {
   const tools: unknown[] = [];
   if (mayCallTools) {
@@ -284,12 +309,11 @@ function callGemini(
   }
   if (grounded) tools.push({ googleSearch: {} });
 
-  return withRetry(
-    () =>
-      fetch(`${API}/${MODEL}:streamGenerateContent?alt=sse`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
+  const send = (model: string) =>
+    fetch(`${API}/${model}:streamGenerateContent?alt=sse`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
           contents,
           systemInstruction: { parts: [{ text: system }] },
           // An empty tools array is not the same as no tools, and the API
@@ -300,17 +324,38 @@ function callGemini(
           ...(grounded
             ? { toolConfig: { includeServerSideToolInvocations: true } }
             : {}),
-          generationConfig: {
-            temperature: 0.75,
-            topP: 0.95,
-            maxOutputTokens: 1024,
-            thinkingConfig: { thinkingBudget: THINKING_BUDGET },
-          },
-        }),
-        signal,
+        generationConfig: {
+          temperature: 0.75,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+          thinkingConfig: { thinkingBudget: THINKING_BUDGET },
+        },
       }),
-    signal,
-  );
+      signal,
+    });
+
+  const primary = await withRetry(() => send(session.model), signal);
+  if (!RETRY_STATUS.has(primary.status) || session.fellBack || session.model === FALLBACK_MODEL) {
+    return primary;
+  }
+
+  /*
+   * Capacity is not uniform across models OR across request shapes. Grounded
+   * streaming on the newest flash model answered 503 for an afternoon while
+   * the same model served function-calling and plain streaming perfectly, and
+   * while an older flash model served grounded streaming without complaint.
+   *
+   * Retrying the same model harder cannot fix that, so once the retries are
+   * spent the request moves to a model that is merely a version behind. A
+   * slightly older answer beats "the assistant is unavailable".
+   */
+  await primary.body?.cancel().catch(() => undefined);
+  const secondary = await withRetry(() => send(FALLBACK_MODEL), signal);
+  if (secondary.ok) {
+    session.model = FALLBACK_MODEL;
+    session.fellBack = true;
+  }
+  return secondary;
 }
 
 /**
