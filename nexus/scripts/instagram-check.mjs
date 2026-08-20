@@ -71,6 +71,31 @@ if (!token) {
   process.exit(1);
 }
 
+/*
+ * Recognise an APP token before spending two round trips on it.
+ *
+ * Its shape is unmistakable — "<numeric app id>|<hash>" — and it is what the
+ * Graph API Explorer hands you by default when "User or Page" is left on
+ * "App Token". It authenticates the app, not a person, so every /me call fails
+ * with "An active access token must be used to query information about the
+ * current user". Reported as expiry or missing permissions, that message sends
+ * you looking in entirely the wrong place.
+ */
+if (/^\d+\|/.test(token)) {
+  bad('This is an APP token, not a user token.');
+  note('Shape "<app id>|<hash>" identifies your app, never a person, so /me');
+  note('can never resolve. The Graph API Explorer returns this by default.');
+  note('');
+  note('Get a user token instead:');
+  note('  App Dashboard → Instagram → API setup with Instagram business login');
+  note('  → add @your_account → Generate token');
+  note('A user token starts with IGQ (Instagram) or EAA (Facebook).');
+  note('');
+  note('Also: this token embeds a derivative of your app secret.');
+  note('Reset it under Settings → Basic → App secret.');
+  process.exit(1);
+}
+
 ok(`Token present (${token.length} characters)`);
 
 // --- Route A: Instagram Login. The token identifies the account directly. ---
