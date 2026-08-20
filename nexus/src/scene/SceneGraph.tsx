@@ -24,6 +24,7 @@ import { HoloText } from './ai/HoloText';
 import { WeatherSky } from './modules/WeatherSky';
 import { ModuleChart } from './modules/ModuleChart';
 import { MarketFloor } from './modules/MarketFloor';
+import { MediaStage } from './media/MediaStage';
 import { EnvironmentDriver } from '@/rendering/env/EnvironmentDriver';
 import { WorldShift } from './fx/WorldShift';
 import { GestureTrails } from './fx/GestureTrails';
@@ -141,6 +142,8 @@ export function SceneGraph() {
       <WorldShift />
       <AiPresence />
       <HoloText />
+      {/* Images, video and solids, standing in the room. */}
+      <MediaStage />
 
       <PostFX />
     </>

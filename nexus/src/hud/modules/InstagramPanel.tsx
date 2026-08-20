@@ -3,6 +3,7 @@
 import type { InstagramData, ModuleFeed } from '@/modules/types';
 import { Bar, FeedState, Line, Provenance, Section, Spark } from './shared';
 import { useT } from '@/i18n';
+import { showImage } from '@/media/actions';
 
 const compact = (n: number) =>
   n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n);
@@ -67,12 +68,17 @@ export function InstagramPanel({ feed }: { feed: ModuleFeed<InstagramData> }) {
       {d.top.length > 0 && (
         <Section title={t('instagram.top')}>
           {d.top.map((post) => (
-            <a
+            <button
               key={post.id}
-              href={post.permalink}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="group flex items-center gap-2 border-b border-signal/8 py-2 last:border-0"
+              type="button"
+              // A thumbnail is a link to somewhere else; here it is the object
+              // itself, so clicking it puts the post in the room.
+              onClick={() =>
+                post.url
+                  ? showImage(post.url, { title: post.caption || post.mediaType, origin: 'module' })
+                  : window.open(post.permalink, '_blank', 'noreferrer')
+              }
+              className="group flex w-full items-center gap-2 border-b border-signal/8 py-2 text-left last:border-0"
             >
               {post.url && (
                 /* eslint-disable-next-line @next/next/no-img-element */
@@ -88,7 +94,7 @@ export function InstagramPanel({ feed }: { feed: ModuleFeed<InstagramData> }) {
               <span className="shrink-0 font-mono text-[9px] text-signal">
                 {compact(post.likes)} {'\u2661'}
               </span>
-            </a>
+            </button>
           ))}
         </Section>
       )}

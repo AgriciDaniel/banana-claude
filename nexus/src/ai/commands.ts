@@ -8,6 +8,8 @@ import { localizeModule } from '@/i18n/modules';
 import { getAudio } from '@/audio/AudioEngine';
 import { bus } from '@/stores/bus';
 import type { CommandCall, CommandResult } from './types';
+import { clearMedia, generateImage, showImage, showShape } from '@/media/actions';
+import type { ShapeKind } from '@/media/types';
 import { useFeedStore } from '@/modules/store';
 import { summariseFeed } from '@/modules/summary';
 
@@ -77,6 +79,58 @@ export const COMMAND_DECLARATIONS = [
       properties: { frozen: { type: 'BOOLEAN' } },
       required: ['frozen'],
     },
+  },
+  {
+    name: 'generate_image',
+    description:
+      'Create an image from a description and place it in the room. Use when the user asks to see, draw, imagine or picture something that does not already exist. Takes several seconds.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        prompt: {
+          type: 'STRING',
+          description: 'A vivid visual description of the subject. English works best.',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
+  {
+    name: 'show_image',
+    description:
+      'Display an existing image or video already known from a module - an Instagram post, a project asset. Requires a direct media URL, never a page URL.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        url: { type: 'STRING', description: 'Direct URL to the image or video file.' },
+        title: { type: 'STRING' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'show_shape',
+    description:
+      'Place a glowing parametric solid in the room. Use for illustrating a form, a comparison of size, or when the user asks for a shape.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        shape: {
+          type: 'STRING',
+          enum: ['sphere', 'box', 'torus', 'knot', 'icosahedron', 'cylinder', 'cone', 'ring'],
+        },
+        color: { type: 'STRING', description: 'Hex colour such as #63C9FF. Optional.' },
+        scale: { type: 'NUMBER', description: '0.3 to 3. Optional.' },
+        spin: { type: 'NUMBER', description: 'Turns per second, -2 to 2. Optional.' },
+        wireframe: { type: 'BOOLEAN' },
+      },
+      required: ['shape'],
+    },
+  },
+  {
+    name: 'clear_display',
+    description: 'Remove whatever is currently displayed in the room.',
+    parameters: { type: 'OBJECT', properties: {} },
   },
   {
     name: 'set_language',
@@ -196,6 +250,57 @@ export function executeCommand(call: CommandCall): CommandResult {
       if (frozen) audio.freeze();
       else audio.thaw();
       result = { name: call.name, ok: true, detail: frozen ? 'world frozen' : 'world resumed' };
+      break;
+    }
+
+    case 'generate_image': {
+      const prompt = String(call.args.prompt ?? '').trim();
+      if (!prompt) {
+        result = fail('no prompt given');
+        break;
+      }
+      generateImage(prompt);
+      // Returns before the image exists: generation takes seconds, and the
+      // model should acknowledge rather than wait.
+      result = { name: call.name, ok: true, detail: 'image generation started' };
+      break;
+    }
+
+    case 'show_image': {
+      const url = String(call.args.url ?? '').trim();
+      if (!/^https?:\/\//i.test(url)) {
+        result = fail('a direct http(s) media URL is required');
+        break;
+      }
+      const title = typeof call.args.title === 'string' ? call.args.title : undefined;
+      showImage(url, { title });
+      result = { name: call.name, ok: true, detail: `displaying ${title ?? url}` };
+      break;
+    }
+
+    case 'show_shape': {
+      const kind = String(call.args.shape ?? '') as ShapeKind;
+      const allowed: ShapeKind[] = [
+        'sphere', 'box', 'torus', 'knot', 'icosahedron', 'cylinder', 'cone', 'ring',
+      ];
+      if (!allowed.includes(kind)) {
+        result = fail(`unknown shape "${String(call.args.shape)}"`);
+        break;
+      }
+      showShape({
+        kind,
+        color: typeof call.args.color === 'string' ? call.args.color : undefined,
+        scale: typeof call.args.scale === 'number' ? call.args.scale : undefined,
+        spin: typeof call.args.spin === 'number' ? call.args.spin : undefined,
+        wireframe: call.args.wireframe === true,
+      });
+      result = { name: call.name, ok: true, detail: `showing a ${kind}` };
+      break;
+    }
+
+    case 'clear_display': {
+      clearMedia();
+      result = { name: call.name, ok: true, detail: 'display cleared' };
       break;
     }
 

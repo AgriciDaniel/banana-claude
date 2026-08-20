@@ -365,4 +365,13 @@ export const fr: Record<TranslationKey, string> = {
   'log.twoSplit': 'DEUX MAINS / DÉPLOYER',
   'log.twoSelect': 'DEUX MAINS / {count} MARQUÉS',
   'instagram.noInsights': "LES CHIFFRES D'AUDIENCE CI-DESSOUS SONT INDISPONIBLES : LE JETON N'A PAS instagram_business_manage_insights. LE PROFIL ET LES PUBLICATIONS SONT EN DIRECT.",
+  'log.mediaShown': 'AFFICHÉ / {what}',
+  'log.mediaShape': 'FORME / {shape}',
+  'log.mediaGenerating': "GÉNÉRATION D'IMAGE...",
+  'log.mediaFailed': 'ÉCHEC IMAGE / {error}',
+  'log.mediaCleared': 'AFFICHAGE EFFACÉ',
+  'media.generated': 'GÉNÉRÉ PAR GEMINI',
+  'media.title': 'Affichage',
+  'media.close': 'EFFACER',
+  'media.generating': "COMPOSITION DE L'IMAGE",
 };

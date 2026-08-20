@@ -14,6 +14,7 @@ import { useAssistantStore } from '@/stores/useAssistantStore';
 import { useT } from '@/i18n';
 import { AssistantPanel } from './ai/AssistantPanel';
 import { EnvironmentSwitcher } from './EnvironmentSwitcher';
+import { MediaBar } from './MediaBar';
 
 /**
  * HUD layout.
@@ -65,6 +66,7 @@ export function HUD() {
               <GestureLegend />
               <AssistantPanel />
               <EnvironmentSwitcher />
+              <MediaBar />
             </motion.div>
           )}
         </AnimatePresence>

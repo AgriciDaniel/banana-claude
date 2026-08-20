@@ -1,7 +1,7 @@
-import type { NextRequest } from 'next/server';
-import { COMMAND_DECLARATIONS } from '@/ai/commands';
-import { buildSystemInstruction } from '@/ai/prompt';
-import type { GenerateRequest } from '@/ai/types';
+import type { NextRequest } from "next/server";
+import { COMMAND_DECLARATIONS } from "@/ai/commands";
+import { buildSystemInstruction } from "@/ai/prompt";
+import type { GenerateRequest } from "@/ai/types";
 
 /**
  * Gemini streaming proxy.
@@ -18,28 +18,28 @@ import type { GenerateRequest } from '@/ai/types';
  * The user sees one continuous reply, and the interface has already moved.
  */
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-const API = 'https://generativelanguage.googleapis.com/v1beta/models';
+const API = "https://generativelanguage.googleapis.com/v1beta/models";
 /** Carriage return, spelled out: an escape here is one bad edit away from a
  *  literal newline in the source, which is exactly how this broke once. */
 const CR = String.fromCharCode(13);
-const EMPTY = '';
+const EMPTY = "";
 
-const MODEL = process.env.GEMINI_MODEL ?? 'gemini-3.7-flash';
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.7-flash";
 /**
  * Search grounding is ON by default. Half the questions this assistant exists
  * to answer - "how is Nvidia today", "latest AI news", "what is the weather" -
  * are worthless without live data, and a confidently stale number is worse
  * than no number.
  */
-const GROUNDING = process.env.GEMINI_GROUNDING !== '0';
+const GROUNDING = process.env.GEMINI_GROUNDING !== "0";
 /**
  * Gemini 3 deliberates before answering. For a voice assistant, time to first
  * spoken word beats depth, so thinking is off by default.
  */
-const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET ?? '0');
+const THINKING_BUDGET = Number(process.env.GEMINI_THINKING_BUDGET ?? "0");
 /** Tool round trips per turn. Two is enough for "open X and tell me about it". */
 const MAX_TOOL_DEPTH = 2;
 
@@ -57,7 +57,9 @@ interface GeminiPart {
 
 interface GeminiCandidate {
   content?: { parts?: GeminiPart[]; role?: string };
-  groundingMetadata?: { groundingChunks?: Array<{ web?: { title?: string; uri?: string } }> };
+  groundingMetadata?: {
+    groundingChunks?: Array<{ web?: { title?: string; uri?: string } }>;
+  };
 }
 
 interface GeminiChunk {
@@ -82,7 +84,7 @@ export async function POST(request: NextRequest) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     return Response.json(
-      { error: 'GEMINI_API_KEY is not set. Add it to .env.local and restart.' },
+      { error: "GEMINI_API_KEY is not set. Add it to .env.local and restart." },
       { status: 503 },
     );
   }
@@ -91,13 +93,13 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as GenerateRequest;
   } catch {
-    return Response.json({ error: 'Malformed request body' }, { status: 400 });
+    return Response.json({ error: "Malformed request body" }, { status: 400 });
   }
 
   const system = buildSystemInstruction(body.context, GROUNDING);
   const contents: Content[] = [
     ...body.history.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
-    { role: 'user', parts: [{ text: body.prompt }] },
+    { role: "user", parts: [{ text: body.prompt }] },
   ];
 
   const encoder = new TextEncoder();
@@ -107,18 +109,23 @@ export async function POST(request: NextRequest) {
       let closed = false;
       const send: Send = (payload) => {
         if (closed) return;
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+        );
       };
 
       try {
         await runTurn(contents, 0, send, key, system, request.signal);
       } catch (error) {
         if (!request.signal.aborted) {
-          send({ type: 'error', error: error instanceof Error ? error.message : String(error) });
+          send({
+            type: "error",
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
-      send({ type: 'done' });
+      send({ type: "done" });
       closed = true;
       controller.close();
     },
@@ -126,9 +133,9 @@ export async function POST(request: NextRequest) {
 
   return new Response(stream, {
     headers: {
-      'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': 'no-cache, no-transform',
-      connection: 'keep-alive',
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
     },
   });
 }
@@ -145,8 +152,11 @@ async function runTurn(
   const upstream = await callGemini(contents, key, system, signal, GROUNDING);
 
   if (!upstream.ok || !upstream.body) {
-    const detail = await upstream.text().catch(() => '');
-    send({ type: 'error', error: extractError(detail) ?? `Gemini returned ${upstream.status}` });
+    const detail = await upstream.text().catch(() => "");
+    send({
+      type: "error",
+      error: extractError(detail) ?? `Gemini returned ${upstream.status}`,
+    });
     return;
   }
 
@@ -157,7 +167,7 @@ async function runTurn(
 
   await consume(upstream.body, (chunk) => {
     if (chunk.error?.message) {
-      send({ type: 'error', error: chunk.error.message });
+      send({ type: "error", error: chunk.error.message });
       return;
     }
 
@@ -170,13 +180,16 @@ async function runTurn(
       // Reasoning is internal. Speaking it aloud would be wrong and unsettling.
       if (part.thought) continue;
 
-      if (part.text) send({ type: 'text', text: part.text });
+      if (part.text) send({ type: "text", text: part.text });
 
       if (part.functionCall) {
         calls.push({ name: part.functionCall.name, id: part.functionCall.id });
         send({
-          type: 'command',
-          command: { name: part.functionCall.name, args: part.functionCall.args ?? {} },
+          type: "command",
+          command: {
+            name: part.functionCall.name,
+            args: part.functionCall.args ?? {},
+          },
         });
       }
     }
@@ -184,11 +197,11 @@ async function runTurn(
     const grounding = candidate?.groundingMetadata?.groundingChunks;
     if (grounding?.length && !sentSources) {
       const sources = grounding
-        .map((g) => ({ title: g.web?.title ?? '', uri: g.web?.uri ?? '' }))
+        .map((g) => ({ title: g.web?.title ?? "", uri: g.web?.uri ?? "" }))
         .filter((s) => s.uri);
       if (sources.length) {
         sentSources = true;
-        send({ type: 'sources', sources: sources.slice(0, 4) });
+        send({ type: "sources", sources: sources.slice(0, 4) });
       }
     }
   });
@@ -205,12 +218,16 @@ async function runTurn(
     functionResponse: {
       name: call.name,
       ...(call.id ? { id: call.id } : {}),
-      response: { status: 'dispatched to the interface' },
+      response: { status: "dispatched to the interface" },
     },
   }));
 
   await runTurn(
-    [...contents, { role: 'model', parts: modelParts }, { role: 'user', parts: responses }],
+    [
+      ...contents,
+      { role: "model", parts: modelParts },
+      { role: "user", parts: responses },
+    ],
     depth + 1,
     send,
     key,
@@ -229,25 +246,57 @@ function callGemini(
   const tools: unknown[] = [{ functionDeclarations: COMMAND_DECLARATIONS }];
   if (grounded) tools.push({ googleSearch: {} });
 
-  return fetch(`${API}/${MODEL}:streamGenerateContent?alt=sse`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents,
-      systemInstruction: { parts: [{ text: system }] },
-      tools,
-      // Built-in tools (search) and our own functions may only be combined
-      // when server-side tool invocations are explicitly opted into.
-      ...(grounded ? { toolConfig: { includeServerSideToolInvocations: true } } : {}),
-      generationConfig: {
-        temperature: 0.75,
-        topP: 0.95,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: THINKING_BUDGET },
-      },
-    }),
+  return withRetry(
+    () =>
+      fetch(`${API}/${MODEL}:streamGenerateContent?alt=sse`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          contents,
+          systemInstruction: { parts: [{ text: system }] },
+          tools,
+          // Built-in tools (search) and our own functions may only be combined
+          // when server-side tool invocations are explicitly opted into.
+          ...(grounded
+            ? { toolConfig: { includeServerSideToolInvocations: true } }
+            : {}),
+          generationConfig: {
+            temperature: 0.75,
+            topP: 0.95,
+            maxOutputTokens: 1024,
+            thinkingConfig: { thinkingBudget: THINKING_BUDGET },
+          },
+        }),
+        signal,
+      }),
     signal,
-  });
+  );
+}
+
+/**
+ * Gemini answers a burst of load with 429/503 and a body that reads
+ * "experiencing high traffic". Those clear in well under a second, and a user
+ * who just spoke should not be told the assistant is broken because the first
+ * attempt landed badly. Anything else -- a bad key, a malformed request -- is
+ * returned untouched, because retrying it would only delay the real error.
+ */
+const RETRY_STATUS = new Set([429, 503]);
+const RETRY_DELAYS_MS = [400, 1100];
+
+async function withRetry(
+  attempt: () => Promise<Response>,
+  signal: AbortSignal,
+): Promise<Response> {
+  let response = await attempt();
+  for (const delay of RETRY_DELAYS_MS) {
+    if (!RETRY_STATUS.has(response.status) || signal.aborted) return response;
+    // The body is unread on a failed attempt; release it before trying again.
+    await response.body?.cancel().catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    if (signal.aborted) break;
+    response = await attempt();
+  }
+  return response;
 }
 
 /** Read an SSE body and hand each decoded frame to `onChunk`. */
@@ -271,16 +320,16 @@ async function consume(
        */
       buffer += decoder.decode(value, { stream: true }).split(CR).join(EMPTY);
 
-      let boundary = buffer.indexOf('\n\n');
+      let boundary = buffer.indexOf("\n\n");
       while (boundary !== -1) {
         const frame = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
-        boundary = buffer.indexOf('\n\n');
+        boundary = buffer.indexOf("\n\n");
 
-        const line = frame.split('\n').find((l) => l.startsWith('data:'));
+        const line = frame.split("\n").find((l) => l.startsWith("data:"));
         if (!line) continue;
         const json = line.slice(5).trim();
-        if (!json || json === '[DONE]') continue;
+        if (!json || json === "[DONE]") continue;
 
         try {
           onChunk(JSON.parse(json) as GeminiChunk);

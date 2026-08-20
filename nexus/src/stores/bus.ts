@@ -43,6 +43,10 @@ export interface NexusEvents {
   'env:change': { id: string; source: 'module' | 'user' };
   /** A ripple should spread from this point on a card surface. */
   'fx:ripple': { position: [number, number, number]; strength: number };
+
+  // --- phase 5: spatial media ---------------------------------------------
+  /** Something was placed in the room. */
+  'media:show': { id: string; kind: string };
 }
 
 export const bus = createBus<NexusEvents>();
