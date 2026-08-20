@@ -4,6 +4,14 @@ import { executeCommand } from './commands';
 import { bus } from '@/stores/bus';
 import { gestureSnapshot, interaction } from '@/stores/runtime';
 import { rehearse, SCENARIOS } from '@/gesture/devScenarios';
+import {
+  startRecording,
+  takeRecording,
+  recordingLabels,
+  replayRecording,
+  forgetRecording,
+  type Recording,
+} from '@/gesture/recorder';
 import type { CommandCall } from './types';
 
 /**
@@ -36,6 +44,14 @@ export interface DevBridge {
   rehearse: (scenario: string) => Promise<boolean>;
   /** Names of every available rehearsal. */
   scenarios: () => string[];
+  /** Capture live landmarks under a label, for tuning against a real hand. */
+  record: (label: string, ms: number) => void;
+  /** Retrieve a capture. */
+  take: (label: string) => Recording | null;
+  takes: () => string[];
+  /** Replay a capture through the pipeline at its original cadence. */
+  replay: (label: string) => Promise<number>;
+  forget: (label: string) => void;
 }
 
 export interface GestureReadout {
@@ -55,6 +71,11 @@ export interface GestureReadout {
   depthVelocity: number;
   pinch: number;
   openness: number;
+  /** Filtered palm centre, normalised image coordinates. */
+  palmX: number;
+  palmY: number;
+  /** Palm speed in normalised units per second. */
+  palmSpeed: number;
 }
 
 let timer = 0;
@@ -118,10 +139,20 @@ export function installDevBridge(): () => void {
       depthVelocity: gestureSnapshot.primary?.depthVelocity ?? 0,
       pinch: gestureSnapshot.primary?.pinch ?? 0,
       openness: gestureSnapshot.primary?.openness ?? 0,
+      palmX: gestureSnapshot.primary?.palm.x ?? 0,
+      palmY: gestureSnapshot.primary?.palm.y ?? 0,
+      palmSpeed: gestureSnapshot.primary
+        ? Math.hypot(gestureSnapshot.primary.velocity.x, gestureSnapshot.primary.velocity.y)
+        : 0,
     }),
 
     rehearse: (scenario) => rehearse(scenario),
     scenarios: () => Object.keys(SCENARIOS),
+    record: (label, ms) => startRecording(label, ms),
+    take: (label) => takeRecording(label),
+    takes: () => recordingLabels(),
+    replay: (label) => replayRecording(label),
+    forget: (label) => forgetRecording(label),
   };
 
   (window as unknown as { __nexus: DevBridge }).__nexus = bridge;

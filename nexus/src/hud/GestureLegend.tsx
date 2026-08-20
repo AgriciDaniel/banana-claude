@@ -15,6 +15,7 @@ const HAND_KEYS: Entry[] = [
   ['legend.depth', 'legend.depth.do'],
   ['legend.palm', 'legend.palm.do'],
   ['legend.circle', 'legend.circle.do'],
+  ['legend.snap', 'legend.snap.do'],
 ];
 
 const POINTER_KEYS: Entry[] = [

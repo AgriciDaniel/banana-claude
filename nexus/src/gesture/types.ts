@@ -19,6 +19,8 @@ export type GestureKind =
   | 'open_hand'
   | 'closed_hand'
   | 'circle'
+  /** Fingers snapped: a punctual "go back". */
+  | 'snap'
   // --- two-handed --------------------------------------------------------
   /** Both hands pinched and drawn together. */
   | 'two_group'
@@ -60,6 +62,10 @@ export interface HandFrame {
    * hand into that posture for as long as it stayed tracked.
    */
   pointing: boolean;
+  /** Thumb-tip to middle-tip distance in spans. Small while a snap is charged. */
+  snapGap: number;
+  /** Middle-tip to wrist distance in spans. Collapses when a snap strikes. */
+  middleReach: number;
   /** Tracking confidence reported by the detector. */
   score: number;
   /** Palm projected onto the interaction plane in world space. */

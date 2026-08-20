@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { HandTracker } from '@/gesture/HandTracker';
 import { GestureEngine } from '@/gesture/GestureEngine';
 import { registerFramePublisher, cameraMuted } from '@/gesture/devFeed';
+import { captureFrame } from '@/gesture/recorder';
+
+const DEV = process.env.NODE_ENV !== 'production';
 import { gestureSnapshot, interaction } from '@/stores/runtime';
 import { bus } from '@/stores/bus';
 import { useSystemStore } from '@/stores/useSystemStore';
@@ -93,18 +96,24 @@ export function useHandTracking(enabled: boolean) {
       raf = requestAnimationFrame(loop);
       if (disposed) return;
 
-      if (cameraMuted()) return;
+      // The rehearsal seam and the recorder are development instruments.
+      // Behind a build-time constant they fold away entirely, so production
+      // neither calls them nor carries them.
+      if (DEV && cameraMuted()) return;
 
       const now = performance.now();
       const result = tracker.detect(now);
       // No new camera frame — nothing to infer, nothing to publish.
       if (!result) return;
+      if (DEV) captureFrame(result, now);
       publish(result, now);
     };
 
-    registerFramePublisher((result, now) => {
-      if (!disposed) publish(result, now);
-    });
+    if (DEV) {
+      registerFramePublisher((result, now) => {
+        if (!disposed) publish(result, now);
+      });
+    }
 
     (async () => {
       setTracking('requesting');
@@ -135,7 +144,7 @@ export function useHandTracking(enabled: boolean) {
 
     return () => {
       disposed = true;
-      registerFramePublisher(null);
+      if (DEV) registerFramePublisher(null);
       cancelAnimationFrame(raf);
       tracker.dispose();
       engine.reset();

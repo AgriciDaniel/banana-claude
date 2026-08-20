@@ -27,8 +27,13 @@ export interface HandPose {
   span: number;
   /** Extension per finger: index, middle, ring, pinky. 0 curled, 1 straight. */
   fingers: [number, number, number, number];
-  /** Thumb-tip to index-tip gap, in spans. Below ~0.28 reads as a pinch. */
+  /** Gap from the thumb tip to `thumbTo`'s tip, in spans. */
   thumbGap: number;
+  /**
+   * Which fingertip the thumb sits against. A pinch loads the index; a snap
+   * loads the middle, and the two must not be confusable.
+   */
+  thumbTo?: 'index' | 'middle';
   z: number;
 }
 
@@ -70,26 +75,36 @@ export function buildHand(pose: HandPose): NormalizedLandmark[] {
   // Wrist half a span below the knuckle line, so wrist->middle-MCP == span.
   put(LM.WRIST, 0, 0.5);
 
-  let indexTip = { x: 0, y: 0 };
+  const tips: Array<{ x: number; y: number }> = [];
   for (let f = 0; f < 4; f++) {
     const [mcp, pip, dip, tip] = FINGER_IDS[f]!;
-    const ext = pose.fingers[f]!;
+    const e = pose.fingers[f]!;
     const x = MCP_X[f]!;
     put(mcp, x, -0.5);
-    // A curled finger folds its tip back toward the knuckle rather than
-    // shrinking in place: that is what drives extension toward zero.
-    const reach = FINGER_LEN * ext;
-    put(pip, x, -0.5 - reach * 0.42);
-    put(dip, x, -0.5 - reach * 0.74);
-    put(tip, x, -0.5 - reach);
-    if (f === 0) indexTip = { x, y: -0.5 - reach };
+    /*
+     * A curled finger tucks INTO the palm rather than stopping at its own
+     * knuckle. That distinction matters: a snapped middle finger ends up
+     * closer to the wrist than the knuckle it hangs from, and the detector
+     * reads exactly that collapse.
+     */
+    const px = mix(x, x, e);
+    const py = mix(-0.5 - 0.3, -0.5 - FINGER_LEN * 0.42, e);
+    const dx = mix(x * 0.8, x, e);
+    const dy = mix(-0.25, -0.5 - FINGER_LEN * 0.74, e);
+    const tx = mix(x * 0.45, x, e);
+    const ty = mix(0.05, -0.5 - FINGER_LEN, e);
+    put(pip, px, py);
+    put(dip, dx, dy);
+    put(tip, tx, ty);
+    tips.push({ x: tx, y: ty });
   }
 
-  // The thumb is placed relative to the index tip, because the only thing any
-  // detector asks of it is how far it sits from that point.
+  // The thumb is placed relative to whichever fingertip it is loading, since
+  // the only thing any detector asks of it is how far it sits from that point.
+  const anchor = tips[pose.thumbTo === 'middle' ? 1 : 0]!;
   const gap = pose.thumbGap;
-  const tx = indexTip.x - gap * 0.72;
-  const ty = indexTip.y + gap * 0.69;
+  const tx = anchor.x - gap * 0.72;
+  const ty = anchor.y + gap * 0.69;
   put(LM.THUMB_CMC, -0.55, 0.25);
   put(LM.THUMB_MCP, -0.72, -0.02);
   put(LM.THUMB_IP, (tx - 0.72) / 2, (ty - 0.02) / 2);
@@ -134,6 +149,7 @@ export interface Rehearsal {
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const mix = lerp;
 
 /**
  * Each scenario is a function of normalised progress, sampled at camera rate.
@@ -198,6 +214,19 @@ export const SCENARIOS: Record<string, Rehearsal> = {
 
   // The spread dial only engages while BOTH hands pinch: it is a grab, not a
   // wave. Two open palms held apart mean something else entirely (select).
+  /*
+   * Charge then strike, at the cadence the camera actually delivered: the
+   * recorded snaps crossed from charged to struck inside a single frame.
+   */
+  snap: {
+    ms: 200,
+    settle: 400,
+    play: (t) =>
+      t < 0.5
+        ? [{ ...OPEN_PALM, fingers: [0.4, 1, 0.35, 0.35], thumbGap: 0.2, thumbTo: 'middle' }]
+        : [{ ...OPEN_PALM, fingers: [0.4, 0, 0.35, 0.35], thumbGap: 0.95, thumbTo: 'middle' }],
+  },
+
   two_hand_spread: {
     ms: 1000,
     settle: 400,

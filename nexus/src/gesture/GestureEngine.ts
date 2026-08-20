@@ -3,6 +3,8 @@ import type { GestureEvent, HandFrame, Handedness, Posture } from './types';
 import {
   apparentSize,
   isPointing,
+  snapGap,
+  middleReach,
   opennessRatio,
   palmCentre,
   pinchStrength,
@@ -14,6 +16,7 @@ import { DepthDetector } from './detectors/depth';
 import { PalmHoldDetector } from './detectors/palmHold';
 import { CircleDetector } from './detectors/circle';
 import { PostureDetector } from './detectors/posture';
+import { SnapDetector } from './detectors/snap';
 import { TwoHandDetector } from './detectors/twoHand';
 import type { DetectorContext } from './detectors/types';
 import { clamp01 } from '@/core/math';
@@ -44,6 +47,7 @@ interface HandSlot {
     palmHold: PalmHoldDetector;
     circle: CircleDetector;
     posture: PostureDetector;
+    snap: SnapDetector;
   };
   lastSeen: number;
   prevPalm: { x: number; y: number };
@@ -65,6 +69,8 @@ function makeSlot(): HandSlot {
       depthVelocity: 0,
       posture: 'neutral',
       pointing: false,
+      snapGap: 1,
+      middleReach: 1,
       score: 0,
       world: [0, 0, 0],
     },
@@ -81,6 +87,7 @@ function makeSlot(): HandSlot {
       palmHold: new PalmHoldDetector(),
       circle: new CircleDetector(),
       posture: new PostureDetector(),
+      snap: new SnapDetector(),
     },
     lastSeen: 0,
     prevPalm: { x: 0.5, y: 0.5 },
@@ -136,7 +143,7 @@ export class GestureEngine {
         this.runDetectors(slot, dt, now);
         this.liveHands.push(slot.frame);
       } else if (slot.active && now - slot.lastSeen > LOST_MS) {
-        this.retire(slot);
+        this.retire(slot, now);
       }
     }
 
@@ -219,6 +226,8 @@ export class GestureEngine {
     slot.prevSpan = span;
 
     slot.frame.pointing = isPointing(l);
+    slot.frame.snapGap = snapGap(l);
+    slot.frame.middleReach = middleReach(l);
     slot.lastSeen = now;
     slot.active = true;
 
@@ -240,6 +249,9 @@ export class GestureEngine {
     slot.frame.posture = slot.detectors.posture.posture;
 
     const pinch = slot.detectors.pinch.update(ctx);
+    // A snap is punctual and self-contained; it stays available while frozen
+    // so the freeze itself can be dismissed with one.
+    const snap = slot.detectors.snap.update(ctx);
     const palmHold = slot.detectors.palmHold.update(ctx);
 
     // While frozen the world is locked: navigation gestures are suppressed so
@@ -249,12 +261,27 @@ export class GestureEngine {
     const depth = locked ? null : slot.detectors.depth.update(ctx);
     const circle = locked ? null : slot.detectors.circle.update(ctx);
 
-    for (const e of [pinch, palmHold, swipe, depth, circle, posture]) {
+    for (const e of [pinch, snap, palmHold, swipe, depth, circle, posture]) {
       if (e) this.events.push(e);
     }
   }
 
-  private retire(slot: HandSlot): void {
+  private retire(slot: HandSlot, now: number): void {
+    /*
+     * A hand that leaves the frame mid-gesture still owes the interface a
+     * closing event. Resetting silently used to strand a drag open forever:
+     * `pinch_start` sets the dragged card and only `pinch_end` clears it, so
+     * losing tracking while pinched left the engine reporting "grabbing" for
+     * the rest of the session -- which permanently suppresses swipe, since a
+     * manipulating hand is not a navigating one. A latched freeze stranded
+     * the same way.
+     */
+    const abandoned = [
+      slot.detectors.pinch.abandon(slot.frame, now),
+      slot.detectors.palmHold.abandon(slot.frame, now),
+    ];
+    for (const e of abandoned) if (e) this.events.push(e);
+
     slot.active = false;
     slot.palmFilter.reset();
     slot.spanFilter.reset();
@@ -280,7 +307,9 @@ export class GestureEngine {
 
   reset(): void {
     this.twoHand.reset();
-    for (const slot of this.slots) this.retire(slot);
+    // A full reset tears everything down, so nothing is left to notify.
+    for (const slot of this.slots) this.retire(slot, performance.now());
+    this.events.length = 0;
     this.lastTick = 0;
     this.grabbing = false;
   }

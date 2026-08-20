@@ -1,4 +1,4 @@
-import type { GestureEvent } from '../types';
+import type { GestureEvent, HandFrame } from '../types';
 import { makeEvent, type Detector, type DetectorContext } from './types';
 
 /**
@@ -71,6 +71,14 @@ export class PalmHoldDetector implements Detector {
 
   get frozen(): boolean {
     return this.latched;
+  }
+
+  /** Release a freeze whose hand vanished, rather than leaving it latched. */
+  abandon(hand: HandFrame, now: number): GestureEvent | null {
+    if (!this.latched) return null;
+    this.latched = false;
+    this.since = 0;
+    return makeEvent('palm_release', hand, 1, now);
   }
 
   reset(): void {

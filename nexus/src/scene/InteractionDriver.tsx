@@ -10,6 +10,8 @@ import { useCarouselStore } from '@/stores/useCarouselStore';
 import { useSystemStore } from '@/stores/useSystemStore';
 import { bus } from '@/stores/bus';
 import { log } from '@/stores/useLogStore';
+import { useMediaStore } from '@/stores/useMediaStore';
+import { clearMedia } from '@/media/actions';
 import { getAudio } from '@/audio/AudioEngine';
 import { ring } from './ringController';
 import { liveRadius, slotAngle, slotPosition } from './cardMath';
@@ -188,6 +190,35 @@ export function InteractionDriver() {
           cards.expand(id);
           audio.expand();
           log.ok(t('log.expand', { module: nameOf(id) }));
+          break;
+        }
+
+        /*
+         * A snap means "back", one level at a time: drop what is on the
+         * display, else close what is open, else clear the selection.
+         *
+         * It deliberately does NOT thaw a freeze. Charging a snap closes the
+         * hand, which breaks the palm-hold latch on its own a frame or two
+         * earlier -- so a "thaw on snap" branch could never be reached, and
+         * writing one would only suggest a path that does not exist.
+         */
+        case 'snap': {
+          if (useMediaStore.getState().stack.length > 0) {
+            clearMedia();
+            log.ok(t('log.snapBack'));
+            break;
+          }
+          if (cards.expandedId) {
+            log.ok(t('log.collapse', { module: nameOf(cards.expandedId) }));
+            cards.collapse();
+            audio.collapse();
+            break;
+          }
+          if (cards.selectedId) {
+            cards.select(null);
+            audio.collapse();
+            log.ok(t('log.snapBack'));
+          }
           break;
         }
 

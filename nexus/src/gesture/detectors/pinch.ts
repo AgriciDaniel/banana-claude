@@ -1,4 +1,4 @@
-import type { GestureEvent } from '../types';
+import type { GestureEvent, HandFrame } from '../types';
 import { Cooldown, makeEvent, type Detector, type DetectorContext } from './types';
 
 /**
@@ -50,6 +50,18 @@ export class PinchDetector implements Detector {
 
   get held(): boolean {
     return this.engaged;
+  }
+
+  /**
+   * Give up a pinch that ended because the hand left, not because it opened.
+   * Returns the closing event when one is owed, so the interface can unwind a
+   * drag it would otherwise hold open indefinitely.
+   */
+  abandon(hand: HandFrame, now: number): GestureEvent | null {
+    if (!this.engaged) return null;
+    this.engaged = false;
+    this.candidateSince = 0;
+    return makeEvent('pinch_end', hand, 1, now);
   }
 
   reset(): void {

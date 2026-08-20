@@ -109,6 +109,23 @@ export function opennessRatio(l: Float32Array): number {
   return sum / FINGER_CHAINS.length;
 }
 
+/**
+ * Thumb-tip to middle-tip distance, in spans. This is the pair a snap loads,
+ * as distinct from the thumb-index pair a pinch closes.
+ */
+export function snapGap(l: Float32Array): number {
+  return dist3(l, LM.THUMB_TIP, LM.MIDDLE_TIP) / handSpan(l);
+}
+
+/**
+ * How far the middle fingertip sits from the wrist, in spans. Extended it
+ * reads ~1.4; folded against the base of the palm, ~0.65. Measured from the
+ * wrist so that moving the hand across frame does not disturb it.
+ */
+export function middleReach(l: Float32Array): number {
+  return dist2(l, LM.WRIST, LM.MIDDLE_TIP) / handSpan(l);
+}
+
 /** True when only the index finger is extended. */
 export function isPointing(l: Float32Array): boolean {
   const span = handSpan(l);
