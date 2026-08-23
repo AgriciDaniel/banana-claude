@@ -39,10 +39,13 @@ export const MODULES: ModuleDefinition[] = [
     code: 'IGM',
     category: 'social',
     descriptor: 'Social graph ingest / reach telemetry',
+    // Placeholders, not figures: the card must never look like it is reading
+    // an account it has not reached yet. Real values land the moment the feed
+    // does; see deriveFace.
     metrics: [
-      { label: 'REACH', value: '48.2K', level: 0.72 },
-      { label: 'ENGAGE', value: '6.1%', level: 0.41 },
-      { label: 'QUEUE', value: '03', level: 0.25 },
+      { label: 'REACH', value: '--', level: 0.3 },
+      { label: 'ENGAGE', value: '--', level: 0.25 },
+      { label: 'QUEUE', value: '--', level: 0.2 },
     ],
     seed: 0.11,
     status: 'standby',

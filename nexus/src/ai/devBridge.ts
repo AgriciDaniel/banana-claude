@@ -4,6 +4,9 @@ import { executeCommand } from './commands';
 import { bus } from '@/stores/bus';
 import { gestureSnapshot, interaction } from '@/stores/runtime';
 import { useMediaStore } from '@/stores/useMediaStore';
+import { MODULES } from '@/config/modules';
+import { useFeedStore } from '@/modules/store';
+import { deriveFace } from '@/modules/faces';
 import { rehearse, SCENARIOS } from '@/gesture/devScenarios';
 import {
   startRecording,
@@ -51,6 +54,13 @@ export interface DevBridge {
     stack: Array<{ title: string; topic: number }>;
     retiring: Array<{ title: string; topic: number }>;
   };
+  /** What each ring card is currently painting, and on what evidence. */
+  cards: () => Array<{
+    id: string;
+    feed: string;
+    source: string;
+    values: string[];
+  }>;
   /** Capture live landmarks under a label, for tuning against a real hand. */
   record: (label: string, ms: number) => void;
   /** Retrieve a capture. */
@@ -166,6 +176,19 @@ export function installDevBridge(): () => void {
         topic: m.topic,
       });
       return { topic: s.topic, stack: s.stack.map(brief), retiring: s.retiring.map(brief) };
+    },
+    cards: () => {
+      const feeds = useFeedStore.getState().feeds;
+      return MODULES.map((mod) => {
+        const feed = feeds[mod.id];
+        const face = deriveFace(mod, feed);
+        return {
+          id: mod.id,
+          feed: feed?.status ?? 'none',
+          source: face.source,
+          values: face.metrics.map((m) => `${m.label} ${m.value}`),
+        };
+      });
     },
     record: (label, ms) => startRecording(label, ms),
     take: (label) => takeRecording(label),

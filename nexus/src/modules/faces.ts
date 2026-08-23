@@ -67,6 +67,29 @@ function idle(mod: ModuleDefinition, source: string): FaceState {
   return { metrics: mod.metrics, status: mod.status, source };
 }
 
+/** The dash used where a figure would be. An em dash, not a zero. */
+const NO_VALUE = '—';
+
+/**
+ * The card with its labels and no figures.
+ *
+ * A module whose feed failed was still painting the numbers from its static
+ * definition -- Instagram showed 48.2K reach and 6.1% engagement while its
+ * panel, two feet away, said the API had rejected the token. Those figures
+ * were only ever placeholders for the look of the thing, and a card that
+ * cannot see anything must not appear to be reading something.
+ *
+ * The labels stay, so the card is recognisably itself and the user can tell
+ * WHAT is missing, and the bars go to zero.
+ */
+function blank(mod: ModuleDefinition, source: string, status: ModuleDefinition['status']): FaceState {
+  return {
+    metrics: mod.metrics.map((metric) => ({ ...metric, value: NO_VALUE, level: 0 })),
+    status,
+    source,
+  };
+}
+
 export function deriveFace(mod: ModuleDefinition, feed: ModuleFeed<unknown> | undefined): FaceState {
   if (!feed || !feed.data) {
     const source =
@@ -77,10 +100,14 @@ export function deriveFace(mod: ModuleDefinition, feed: ModuleFeed<unknown> | un
           : feed?.status === 'loading'
             ? 'LOADING'
             : '';
-    const state = idle(mod, source);
-    if (feed?.status === 'unconfigured') return { ...state, status: 'standby' };
-    if (feed?.status === 'error') return { ...state, status: 'attention' };
-    return state;
+    /*
+     * Only blank the card once the feed has actually reported. Before the
+     * first fetch there is nothing to contradict, and dashes that flash into
+     * figures a second later read as a fault rather than as loading.
+     */
+    if (feed?.status === 'unconfigured') return blank(mod, source, 'standby');
+    if (feed?.status === 'error') return blank(mod, source, 'attention');
+    return idle(mod, source);
   }
 
   // Deliberately excludes any age or timestamp: those tick, and a ticking
