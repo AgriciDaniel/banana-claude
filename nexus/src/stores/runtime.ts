@@ -191,6 +191,25 @@ export const pendingImpulses = new Map<string, ReleaseImpulse>();
  * rule they live here rather than in the assistant store. The scene reads them
  * directly in useFrame; nothing re-renders.
  */
+/**
+ * The place in the room the assistant is talking about.
+ *
+ * Written by whatever is currently holding content -- today the media stage --
+ * and read by the figure, which turns and points at it. Deliberately a world
+ * point rather than an id: the thing that indicates does not need to know what
+ * kind of thing it is indicating, and a new kind of surface can claim the
+ * assistant's attention tomorrow by writing three numbers here.
+ *
+ * `weight` is how much there is to indicate at all, 0..1. It falls to zero
+ * when the stage empties, which is what lets the arm come back down.
+ */
+export const attention = {
+  weight: 0,
+  x: 0,
+  y: 0,
+  z: 0,
+};
+
 export const voice = {
   /** Speech loudness, 0..1. Drives the presence orb and the interface glow. */
   level: 0,

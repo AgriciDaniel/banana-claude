@@ -25,6 +25,7 @@ import { WeatherSky } from './modules/WeatherSky';
 import { ModuleChart } from './modules/ModuleChart';
 import { MarketFloor } from './modules/MarketFloor';
 import { MediaStage } from './media/MediaStage';
+import { Figure } from './avatar/Figure';
 import { EnvironmentDriver } from '@/rendering/env/EnvironmentDriver';
 import { WorldShift } from './fx/WorldShift';
 import { GestureTrails } from './fx/GestureTrails';
@@ -144,6 +145,8 @@ export function SceneGraph() {
       <HoloText />
       {/* Images, video and solids, standing in the room. */}
       <MediaStage />
+      {/* And someone standing beside them, to point at the one that matters. */}
+      <Figure />
 
       <PostFX />
     </>

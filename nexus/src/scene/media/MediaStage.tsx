@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Group } from 'three';
 import { SPACE } from '@/config/theme';
 import { useMediaStore } from '@/stores/useMediaStore';
+import { attention } from '@/stores/runtime';
 import { useCarouselStore } from '@/stores/useCarouselStore';
 import { Spring, Spring3 } from '@/animation/Spring';
 import { SPRINGS } from '@/animation/presets';
@@ -93,7 +94,17 @@ export function MediaStage() {
   const shrink = useMemo(() => new Spring(1, SPRINGS.glide), []);
 
   useFrame((_, delta) => {
-    if (!group.current) return;
+    if (!group.current) {
+      /*
+       * An empty stage renders nothing, but the component stays mounted -- a
+       * component that returns null is not unmounted, only its children are.
+       * So this branch, not the unmount effect, is what runs when the last
+       * panel goes, and it is the only place that can release the attention.
+       * Without it the figure went on pointing at where a panel used to be.
+       */
+      attention.weight = 0;
+      return;
+    }
     const dt = delta > 0.05 ? 0.05 : delta;
 
     /*
@@ -113,11 +124,38 @@ export function MediaStage() {
     shrink.set(expandedId ? 0.78 : 1);
     shrink.update(dt);
 
+    const yaw = expandedId ? 0.2 : 0;
     group.current.position.set(motion.x.value, motion.y.value, motion.z.value);
     group.current.scale.setScalar(shrink.value);
-    group.current.rotation.y = expandedId ? 0.2 : 0;
+    group.current.rotation.y = yaw;
     group.current.visible = stack.length + retiring.length > 0;
+
+    /*
+     * Publish where the newest panel is standing, so the figure has somewhere
+     * to point. The newest rather than the focused one: in a row of three that
+     * arrive in sequence, the one that just appeared is the one being talked
+     * about, and the arm sweeping along the row as each lands is exactly the
+     * reading we want.
+     *
+     * Computed rather than read off the child: a panel's own world matrix is
+     * only current later in the frame, and this is one rotation of a point on
+     * the local x axis -- cheaper than forcing a matrix update on the subtree.
+     */
+    if (stack.length > 0) {
+      const offset = (places?.[0]?.x ?? 0) * shrink.value;
+      attention.x = motion.x.value + offset * Math.cos(yaw);
+      attention.y = motion.y.value;
+      attention.z = motion.z.value - offset * Math.sin(yaw);
+      attention.weight = 1;
+    } else {
+      attention.weight = 0;
+    }
   });
+
+  /* And for real teardown, where no further frame will run at all. */
+  useEffect(() => () => {
+    attention.weight = 0;
+  }, []);
 
   if (stack.length === 0 && retiring.length === 0) return null;
 

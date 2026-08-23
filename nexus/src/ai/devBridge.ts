@@ -7,6 +7,8 @@ import { useMediaStore } from '@/stores/useMediaStore';
 import { MODULES } from '@/config/modules';
 import { useFeedStore } from '@/modules/store';
 import { deriveFace } from '@/modules/faces';
+import { figureReport } from '@/scene/avatar/report';
+import { attention, voice } from '@/stores/runtime';
 import { rehearse, SCENARIOS } from '@/gesture/devScenarios';
 import {
   startRecording,
@@ -54,6 +56,9 @@ export interface DevBridge {
     stack: Array<{ title: string; topic: number }>;
     retiring: Array<{ title: string; topic: number }>;
   };
+  /** Where the figure is standing, what it is turned toward, and how big it
+   *  comes out on screen. The only way to tune its placement. */
+  figure: () => typeof figureReport & { attention: typeof attention };
   /** What each ring card is currently painting, and on what evidence. */
   cards: () => Array<{
     id: string;
@@ -96,6 +101,7 @@ export interface GestureReadout {
 }
 
 let timer = 0;
+let envelope = 0;
 
 export function installDevBridge(): () => void {
   if (process.env.NODE_ENV === 'production' || typeof window === 'undefined') {
@@ -109,6 +115,7 @@ export function installDevBridge(): () => void {
 
     simulate: (text, wordsPerSecond = 6) => {
       window.clearInterval(timer);
+      window.clearInterval(envelope);
       const store = useAssistantStore.getState();
       // A simulated turn is still a turn: it opens a topic, or the display
       // would behave differently under simulation than in real use.
@@ -118,13 +125,28 @@ export function installDevBridge(): () => void {
       // not just the text.
       bus.emit('ai:wake', { source: 'manual' });
       store.pushUser('(simulated)');
-      store.setStatus('streaming');
+      store.setStatus('speaking');
+
+      /*
+       * A speech envelope, so the visuals driven by the voice are exercised too.
+       *
+       * Simulation exists to tune what the assistant looks like without paying
+       * for a model call, and the moment the figure's mouth was wired to the
+       * real envelope, the mouth became the one visual simulation could not
+       * reach. This is not lip sync -- it is a decaying spike per word, which is
+       * the same shape the real envelope has at this resolution.
+       */
+      envelope = window.setInterval(() => {
+        voice.level *= 0.78;
+      }, 40);
 
       const words = text.split(' ');
       let i = 0;
       timer = window.setInterval(() => {
         if (i >= words.length) {
           window.clearInterval(timer);
+          window.clearInterval(envelope);
+          voice.level = 0;
           useAssistantStore.getState().commitTurn({
             id: nextMessageId(),
             role: 'model',
@@ -135,6 +157,8 @@ export function installDevBridge(): () => void {
           return;
         }
         useAssistantStore.getState().appendStream((i === 0 ? '' : ' ') + words[i]);
+        // Longer words are louder for longer, which is close enough to true.
+        voice.level = Math.min(1, 0.45 + (words[i]?.length ?? 3) * 0.06);
         i++;
       }, 1000 / wordsPerSecond);
     },
@@ -177,6 +201,7 @@ export function installDevBridge(): () => void {
       });
       return { topic: s.topic, stack: s.stack.map(brief), retiring: s.retiring.map(brief) };
     },
+    figure: () => ({ ...figureReport, attention: { ...attention } }),
     cards: () => {
       const feeds = useFeedStore.getState().feeds;
       return MODULES.map((mod) => {
