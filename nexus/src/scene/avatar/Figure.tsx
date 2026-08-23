@@ -6,6 +6,7 @@ import {
   AdditiveBlending,
   Color,
   DoubleSide,
+  MeshBasicMaterial,
   Quaternion,
   ShaderMaterial,
   Vector3,
@@ -66,7 +67,7 @@ const HOME: [number, number, number] = [-2.2, -0.05, 6.6];
  * standing beside content taller than itself, is also simply the right image:
  * it presents the room, it does not occupy it.
  */
-const FIGURE_SCALE = 0.62;
+const FIGURE_SCALE = 0.68;
 
 /**
  * Standing down.
@@ -165,34 +166,88 @@ export function Figure() {
    * in mid-air exactly where the head should have been.
    */
   const skins = useMemo(() => {
-    const make = (plates: number, shell: number) =>
+    const make = (rings: number, shell: number) =>
       new ShaderMaterial({
         vertexShader: FIGURE_VERT,
         fragmentShader: FIGURE_FRAG,
-        uniforms: { ...uniforms, uPlates: { value: plates }, uShell: { value: shell } },
+        uniforms: { ...uniforms, uRings: { value: rings }, uShell: { value: shell } },
         transparent: true,
         depthWrite: false,
         blending: AdditiveBlending,
         side: DoubleSide,
       });
     return {
-      /** Limbs, joints, hands, feet, skull: hard, segmented, seams lit. */
-      shell: make(5, 1),
-      /** The trunk. Fewer divisions, and only its edges catch the light. */
-      suit: make(3, 0),
-      /** Hair takes no plating at all -- it is the one part that is not built. */
-      hair: make(0, 0.3),
+      /*
+       * The body, all of it, on one contour density.
+       *
+       * There were three skins when the surface was plating, because a plated
+       * forearm and the suit beneath the chest are different objects. Contours
+       * are the opposite proposition: they describe one continuous form, and
+       * the instant the trunk and the arm are cut at different intervals the
+       * form comes apart again. So the whole body shares this one.
+       */
+      body: make(340, 1),
+      /*
+       * The skull, cut far more coarsely than the rest.
+       *
+       * Measured: the head lands about forty pixels tall on screen, and at the
+       * body's contour spacing that is a dozen rings across a face. No face
+       * survives that -- the eyes and the mouth simply became two more stripes.
+       * Six or seven rings still read as the same scanned surface and leave the
+       * features somewhere to be.
+       */
+      head: make(130, 1),
+      /** Hair is not built and does not get the same treatment. */
+      hair: make(150, 0.35),
     };
   }, [uniforms]);
   useEffect(
     () => () => {
-      skins.shell.dispose();
-      skins.suit.dispose();
+      skins.body.dispose();
+      skins.head.dispose();
       skins.hair.dispose();
     },
     [skins],
   );
-  const material = skins.shell;
+  const material = skins.body;
+
+  /*
+   * The plinth it stands on.
+   *
+   * Every reference for a projected human body has one, and it is doing real
+   * work: it says the figure is being projected rather than standing there,
+   * and it gives the feet a floor to meet -- which is what the long dissolve
+   * up the shins used to stand in for. Rings rather than a solid disc, because
+   * a disc under a translucent body reads as a shadow.
+   */
+  const dais = useMemo(
+    () => ({
+      line: new MeshBasicMaterial({
+        color: PALETTE.signal,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        side: DoubleSide,
+      }),
+      fill: new MeshBasicMaterial({
+        color: PALETTE.core,
+        transparent: true,
+        depthWrite: false,
+        blending: AdditiveBlending,
+        side: DoubleSide,
+      }),
+    }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      dais.line.dispose();
+      dais.fill.dispose();
+    },
+    [dais],
+  );
+  const arcA = useRef<Mesh>(null);
+  const arcB = useRef<Mesh>(null);
 
   const place = useMemo(() => new Spring3(HOME, SPRINGS.glide), []);
   const presence = useMemo(() => new Spring(0, SPRINGS.glide), []);
@@ -405,7 +460,7 @@ export function Figure() {
     if (mouth.current) {
       const open = jaw.value;
       mouth.current.scale.set(1 - open * 0.18, 0.2 + open * 1.5, 1);
-      (mouth.current.material as { opacity: number }).opacity = 0.4 + open * 0.55;
+      (mouth.current.material as { opacity: number }).opacity = 0.55 + open * 0.45;
     }
 
     // --- Eyes ------------------------------------------------------------
@@ -422,6 +477,15 @@ export function Figure() {
       }
       eyes.current.scale.y = time < b.until ? 0.08 : 1;
     }
+
+    /*
+     * The plinth. Turning slowly, and brightening with the voice, so it reads
+     * as a projector doing work rather than as a decal under the feet.
+     */
+    dais.line.opacity = here * (0.4 + voice.level * 0.35);
+    dais.fill.opacity = here * (0.07 + voice.level * 0.1);
+    if (arcA.current) arcA.current.rotation.z = time * 0.22;
+    if (arcB.current) arcB.current.rotation.z = -time * 0.15;
 
     /*
      * Where the body actually landed, in pixels. Measured from the head and
@@ -488,6 +552,26 @@ export function Figure() {
 
   return (
     <group ref={group} name="assistant-figure" scale={FIGURE_SCALE} visible={false}>
+      <group position={[0, RIG.footY - 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh material={dais.fill}>
+          <circleGeometry args={[0.36, 48]} />
+        </mesh>
+        <mesh material={dais.line}>
+          <ringGeometry args={[0.44, 0.452, 64]} />
+        </mesh>
+        {/* Arcs, not rings: a full circle turning looks exactly like a full
+            circle standing still. */}
+        <mesh ref={arcA} material={dais.line}>
+          <ringGeometry args={[0.36, 0.382, 48, 1, 0, 2.3]} />
+        </mesh>
+        <mesh ref={arcB} material={dais.line}>
+          <ringGeometry args={[0.27, 0.284, 48, 1, 0, 1.4]} />
+        </mesh>
+        <mesh material={dais.line}>
+          <ringGeometry args={[0.19, 0.197, 48]} />
+        </mesh>
+      </group>
+
       <group ref={root}>
         {/* Legs. Static: this figure stands, it never walks. */}
         {([-1, 1] as const).map((side) => (
@@ -503,13 +587,13 @@ export function Figure() {
         ))}
 
         <group ref={chest}>
-          <mesh material={skins.suit} geometry={body.torso} />
+          <mesh material={skins.body} geometry={body.torso} />
 
           {arm(-1, shoulderL, elbowL, openL, curledL)}
           {arm(1, shoulderR, elbowR, openR, curledR)}
 
           <group ref={head} position={[0, RIG.headY, 0]}>
-            <mesh material={material} geometry={body.head} />
+            <mesh material={skins.head} geometry={body.head} />
             {/*
               Hair. It earns its place: in a silhouette this small it is the
               single strongest signal that what you are looking at is a person.
@@ -523,10 +607,16 @@ export function Figure() {
               at this scale lands in the uncanny valley, and this figure has no
               business being mistaken for a person.
             */}
-            <group ref={eyes} position={[0, 0.016, RIG.faceZ]}>
+            {/*
+              Pushed a little further out than the skull and drawn at full
+              strength: the contour rings cross the head like everything else,
+              and at this size a face at the same brightness simply disappears
+              into them.
+            */}
+            <group ref={eyes} position={[0, 0.016, RIG.faceZ + 0.006]}>
               {([-1, 1] as const).map((side) => (
                 <mesh key={side} position={[side * 0.036, 0, 0]} rotation={[0, side * -0.24, 0]}>
-                  <planeGeometry args={[0.03, 0.014]} />
+                  <planeGeometry args={[0.035, 0.016]} />
                   <meshBasicMaterial
                     color={PALETTE.signal}
                     transparent
@@ -538,8 +628,8 @@ export function Figure() {
               ))}
             </group>
 
-            <mesh ref={mouth} position={[0, -0.055, RIG.faceZ - 0.006]}>
-              <planeGeometry args={[0.042, 0.03]} />
+            <mesh ref={mouth} position={[0, -0.055, RIG.faceZ]}>
+              <planeGeometry args={[0.048, 0.032]} />
               <meshBasicMaterial
                 color={PALETTE.lumen}
                 transparent

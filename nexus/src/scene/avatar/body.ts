@@ -38,14 +38,22 @@ const lathe = (profile: Profile, segments: number, phiStart = 0, phiLength = Mat
 
 /**
  * A limb: thick at the joint it hangs from, tapering toward the next one, with
- * a slight swell in the belly of the muscle. The swell is what stops a tapered
- * cone from reading as a table leg.
+ * a swell where the muscle is. The swell is what stops a tapered cone from
+ * reading as a table leg -- and *where* it sits is what separates a calf from
+ * a thigh, so it is a parameter and not a constant. A calf is widest just
+ * under the knee; a thigh just under the hip; a forearm just under the elbow.
  */
-const limb = (length: number, top: number, belly: number, end: number): Profile => [
+const limb = (
+  length: number,
+  top: number,
+  belly: number,
+  end: number,
+  bellyAt: number,
+): Profile => [
   [end, -length],
-  [end * 1.12, -length * 0.86],
-  [belly, -length * 0.52],
-  [top * 0.98, -length * 0.12],
+  [end * 1.18, -length * 0.9],
+  [belly, -length * bellyAt],
+  [top * 0.97, -length * 0.08],
   [top, 0],
 ];
 
@@ -164,10 +172,11 @@ export function buildBody(segments: number, rig: {
     FRONT_GAP + 0.24,
   );
 
-  const upperArm = lathe(limb(rig.upperArm, 0.047, 0.04, 0.03), ring);
-  const forearm = lathe(limb(rig.forearm, 0.039, 0.033, 0.024), ring);
-  const thigh = lathe(limb(rig.thigh, 0.07, 0.06, 0.042), ring);
-  const shin = lathe(limb(rig.shin, 0.05, 0.043, 0.026), ring);
+  /* Deltoid to elbow, elbow to wrist, hip to knee, knee to ankle. */
+  const upperArm = lathe(limb(rig.upperArm, 0.052, 0.043, 0.031, 0.4), ring);
+  const forearm = lathe(limb(rig.forearm, 0.038, 0.036, 0.021, 0.25), ring);
+  const thigh = lathe(limb(rig.thigh, 0.078, 0.07, 0.041, 0.22), ring);
+  const shin = lathe(limb(rig.shin, 0.049, 0.05, 0.023, 0.28), ring);
 
   /* A foot, so the legs stop somewhere instead of just ending. */
   const foot = new BoxGeometry(0.05, 0.028, 0.115);

@@ -41,9 +41,9 @@ uniform float uPresence;
 uniform float uFootY;
 uniform vec3 uColor;
 uniform vec3 uHot;
-/** How many plate divisions run along this part. 0 leaves the surface bare. */
-uniform float uPlates;
-/** 1 for a hard shell, 0 for the suit under it. */
+/** Contour rings per world unit of height. 0 leaves the surface bare. */
+uniform float uRings;
+/** How solidly this part catches light across its face, not just at its edge. */
 uniform float uShell;
 
 varying vec3 vNormal;
@@ -64,16 +64,28 @@ void main() {
   float rim = pow(1.0 - facing, 1.7);
 
   /*
-   * Scan lines, scrolling slowly downward. They were fine on a bare body and
-   * wrong the moment it had plating: fifty-six horizontal lines crossing the
-   * new vertical seams turned the whole figure into wire mesh. Coarser now, and
-   * barely present -- they are a texture on the light, not a pattern to read.
+   * Contour rings -- the whole surface treatment, and the thing that makes a
+   * body read as a body rather than as a machine.
+   *
+   * Cut in WORLD height, not along the geometry, so they stay level while a
+   * limb swings through them: the figure is read the way a scanner reads it,
+   * in slices. That is exactly what a holographic body looks like, and it is
+   * what plating could never be -- plates divide a form into parts, contours
+   * describe one continuous form.
+   *
+   * Raised to a high power so each ring is a thin bright line with dark
+   * between, instead of a soft stripe.
    */
-  float scan = 0.5 + 0.5 * sin((vHeight - uTime * 0.31) * 24.0);
+  float wave = 0.5 + 0.5 * sin((vHeight - uTime * 0.04) * uRings);
+  float contour = pow(wave, 11.0) * step(0.5, uRings);
 
-  // The feet do not end, they stop being. Anything else needs a floor contact
-  // this figure has no business claiming.
-  float rise = smoothstep(uFootY, uFootY + 0.46, vHeight);
+  /*
+   * The feet fade, but only just. They used to dissolve over half the lower
+   * leg, which was right while the figure hovered over nothing; standing on a
+   * projector it needs ankles, and the dais gives it the floor contact the
+   * fade was standing in for.
+   */
+  float rise = smoothstep(uFootY - 0.02, uFootY + 0.13, vHeight);
 
   // Speaking pushes light into the rim rather than raising the whole body:
   // brightening everything would read as a lamp, brightening the edge reads
@@ -81,40 +93,24 @@ void main() {
   float speech = uLevel * 0.34 * rim;
 
   /*
-   * The skin.
-   *
-   * A body of plain glowing profiles reads as a ghost, and a ghost cannot look
-   * like a machine that belongs to this interface. So the surface is divided:
-   * plates running along each limb, a seam where they meet, and two seams
-   * running down the length. All of it comes from the lathe's own UVs -- v
-   * along the bone, u around it -- so it costs no texture and no asset, and it
-   * follows the geometry exactly however the profile changes width.
-   *
-   * The seams glow rather than darken. A dark line on an additive surface is
-   * invisible; a bright one is the whole point.
+   * A seam down each side, faint. One line where a surface closes on itself is
+   * enough to say the form was built rather than grown; two dozen of them said
+   * "robot", which is not what this is.
    */
-  float alongPlate = fract(vUv.y * uPlates);
-  float plateEdge = smoothstep(0.028, 0.0, min(alongPlate, 1.0 - alongPlate));
   float around = abs(fract(vUv.x * 2.0 + 0.25) - 0.5) * 2.0;
-  float sideSeam = smoothstep(0.978, 1.0, around);
-  float seam = max(plateEdge, sideSeam) * step(0.5, uPlates);
+  float seam = smoothstep(0.984, 1.0, around) * uShell;
 
-  /*
-   * The shell catches light across its whole face; the suit underneath only
-   * catches it at the edges. That one difference is what separates an armoured
-   * forearm from the torso it hangs beside.
-   */
-  float body = mix(0.04, 0.12, uShell);
+  float body = mix(0.03, 0.075, uShell);
 
-  vec3 tint = mix(uColor, uHot, rim * 0.7 + uLevel * 0.2 + seam * 0.85);
+  vec3 tint = mix(uColor, uHot, rim * 0.62 + uLevel * 0.2 + contour * 0.8);
 
   /*
    * Kept deliberately dim. Eleven capsules drawn additively overlap wherever a
    * limb crosses the torso, and the scene's bloom is generous: values that look
    * reasonable on one surface become a lamp once three of them stack up.
    */
-  float alpha = (body + rim * 0.78 + scan * 0.014 + seam * 0.34 + speech) * rise * uPresence;
+  float alpha = (body + rim * 0.74 + contour * 0.42 + seam * 0.14 + speech) * rise * uPresence;
 
-  gl_FragColor = vec4(tint * (0.6 + rim * 0.8 + seam * 0.55 + uLevel * 0.2), alpha);
+  gl_FragColor = vec4(tint * (0.52 + rim * 0.82 + contour * 0.7 + uLevel * 0.2), alpha);
 }
 `;
