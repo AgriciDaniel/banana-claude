@@ -39,13 +39,15 @@ import { rasterise } from './textRaster';
  * while staying large enough to read, and puts it in front of the ring rather
  * than behind the front card.
  */
-const PANEL_WIDTH = 5.6;
+const PANEL_WIDTH = 4.6;
 const PANEL_Y = 1.9;
 const PANEL_Z = 3.2;
 /** Re-layout at reading speed, not at frame rate. */
 const RELAYOUT_MS = 110;
 /** How long the old turn takes to blow away. */
 const DISSOLVE_S = 0.55;
+/** How long the words stay up after the assistant stops delivering them. */
+const LINGER_MS = 2400;
 
 /**
  * Dev-only diagnostics, mirroring window.__nexus.
@@ -141,16 +143,36 @@ export function HoloText() {
    * nothing with no way to recover. Reading the store is a couple of property
    * accesses every 110ms, and it is self-correcting by construction.
    */
+  /** When the words may leave. Written by readText, read by readText. */
+  const held = useRef(0);
+
   const readText = useCallback(() => {
     const store = useAssistantStore.getState();
     if (store.streaming) return store.streaming;
     /*
-     * Hold the last thing the assistant said until the next reply actually
-     * starts arriving. Blanking on the new question empties the panel for the
-     * whole "thinking" phase - exactly when the user is waiting and looking at
-     * it - and made the text flicker whenever the microphone picked up room
-     * noise and opened a turn that produced nothing.
+     * The words stand while they are being delivered, and then they go.
+     *
+     * They used to stand until the next reply arrived, which meant the last
+     * answer hung over the room indefinitely -- through the next question,
+     * through the thinking, through whatever you did afterwards. Holding them
+     * had a reason: blanking on the new question empties the panel for the
+     * whole thinking phase, exactly when someone is waiting and looking at it.
+     * The linger below covers that. It does not need the text to stay up for
+     * minutes.
+     *
+     * So: while it is speaking, and for a couple of seconds after -- long
+     * enough to finish reading a line you were halfway through, and enough to
+     * cover the case where there is no voice at all and the status drops
+     * straight back to listening the instant the reply commits.
      */
+    const status = store.status;
+    const now = performance.now();
+    if (status === 'speaking' || status === 'streaming') {
+      held.current = now + LINGER_MS;
+    } else if (now > held.current) {
+      return '';
+    }
+
     for (let i = store.history.length - 1; i >= 0; i--) {
       const message = store.history[i]!;
       if (message.role === 'model' && message.text) return message.text;

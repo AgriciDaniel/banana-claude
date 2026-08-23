@@ -25,6 +25,8 @@ const CANVAS_W = 620;
 const CANVAS_H = 230;
 const LINE_H = 34;
 const PADDING = 10;
+/** How many lines stand at once. */
+const MAX_LINES = 3;
 
 export interface RasterResult {
   /** Flat xy pairs in world units, centred on the origin. */
@@ -94,9 +96,17 @@ export function rasterise(text: string, width: number, budget: number): RasterRe
   }
   if (line) lines.push(line);
 
-  // Keep the most recent lines: a long answer scrolls upward out of the panel
-  // rather than shrinking to fit, which would make earlier text unreadable.
-  const maxLines = Math.floor((CANVAS_H - PADDING * 2) / LINE_H);
+  /*
+   * Keep the most recent lines: a long answer scrolls upward out of the panel
+   * rather than shrinking to fit, which would make earlier text unreadable.
+   *
+   * Three, not the six the canvas has room for. Six lines of text at this size
+   * covered the top third of the room and read as a subtitle track laid over
+   * the scene rather than as something spoken in it. The words are also being
+   * said aloud; the panel is there to catch what you missed, not to be read
+   * instead of listening.
+   */
+  const maxLines = Math.min(MAX_LINES, Math.floor((CANVAS_H - PADDING * 2) / LINE_H));
   const visible = lines.slice(-maxLines);
   if (visible.length === 0) return empty;
 
