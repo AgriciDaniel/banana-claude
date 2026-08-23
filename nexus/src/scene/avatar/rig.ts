@@ -15,20 +15,23 @@ import { clamp } from '@/core/math';
  */
 
 export const RIG = {
-  /** Total height is about 1.55 units -- a head shorter than a module card. */
-  footY: -0.82,
+  /** Total height is about 1.57 units -- a head shorter than a module card. */
+  footY: -0.85,
   kneeY: -0.42,
   chestY: 0.3,
   neckY: 0.46,
   headY: 0.605,
-  headRadius: 0.099,
+  /** Half-height of the skull, for placing anything that sits on it. */
+  headRadius: 0.11,
+  /** How far forward the face sits, so the eyes and mouth clear the skull. */
+  faceZ: 0.083,
 
   shoulderY: 0.395,
   shoulderX: 0.146,
   upperArm: 0.315,
   forearm: 0.285,
 
-  hipX: 0.093,
+  hipX: 0.076,
   thigh: 0.42,
   shin: 0.4,
 
