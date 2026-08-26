@@ -185,10 +185,10 @@ export function buildBody(segments: number, rig: {
   );
 
   /* Deltoid to elbow, elbow to wrist, hip to knee, knee to ankle. */
-  const upperArm = lathe(limb(rig.upperArm, 0.052, 0.043, 0.031, 0.4), ring);
-  const forearm = lathe(limb(rig.forearm, 0.038, 0.036, 0.021, 0.25), ring);
-  const thigh = lathe(limb(rig.thigh, 0.078, 0.07, 0.041, 0.22), ring);
-  const shin = lathe(limb(rig.shin, 0.049, 0.05, 0.023, 0.28), ring);
+  const upperArm = lathe(limb(rig.upperArm, 0.047, 0.039, 0.028, 0.4), ring);
+  const forearm = lathe(limb(rig.forearm, 0.034, 0.032, 0.019, 0.25), ring);
+  const thigh = lathe(limb(rig.thigh, 0.07, 0.062, 0.036, 0.22), ring);
+  const shin = lathe(limb(rig.shin, 0.044, 0.046, 0.02, 0.28), ring);
 
   /* A foot, so the legs stop somewhere instead of just ending. */
   const foot = new BoxGeometry(0.05, 0.028, 0.115);
@@ -291,19 +291,19 @@ function sector(
 /** The trunk profile, so plates and core can be cut from the same curve. */
 function trunkProfile(rig: { chestY: number; neckY: number; shoulderY: number }): Profile {
   return [
-    [0.082, -0.075],
-    [0.096, -0.03],
-    [0.099, 0.0],
-    [0.082, 0.075],
-    [0.081, 0.115],
-    [0.104, 0.185],
-    [0.122, 0.25],
-    [0.134, rig.chestY],
-    [0.145, rig.shoulderY],
-    [0.116, rig.shoulderY + 0.035],
-    [0.058, rig.neckY - 0.015],
-    [0.035, rig.neckY + 0.02],
-    [0.032, rig.neckY + 0.06],
+    [0.074, -0.078],
+    [0.088, -0.032],
+    [0.091, 0.0],
+    [0.073, 0.078],
+    [0.071, 0.12],
+    [0.098, 0.192],
+    [0.12, 0.256],
+    [0.135, rig.chestY],
+    [0.149, rig.shoulderY],
+    [0.118, rig.shoulderY + 0.038],
+    [0.055, rig.neckY - 0.02],
+    [0.032, rig.neckY + 0.02],
+    [0.03, rig.neckY + 0.062],
   ];
 }
 
@@ -354,6 +354,15 @@ export interface Mechanism {
   /** Finger bones, three to a finger, and the knuckle between them. */
   phalanx: BufferGeometry;
   knuckle: BufferGeometry;
+  /*
+   * Pistons. A joint that only bends is a hinge; a joint with an actuator
+   * across it is a machine, and it is the single cheapest thing that reads as
+   * engineering rather than as moulding.
+   */
+  pistonBody: BufferGeometry;
+  pistonRod: BufferGeometry;
+  /** The lights let into the knuckles of the exposed hand. */
+  led: BufferGeometry;
   dispose: () => void;
 }
 
@@ -433,16 +442,20 @@ export function buildMechanism(
   const discRing = new TorusGeometry(0.03, 0.005, 6, ring);
   const slot = new BoxGeometry(0.03, 0.008, 0.006);
 
+  const pistonBody = new CylinderGeometry(0.0105, 0.0105, 0.042, Math.max(6, ring >> 1));
+  const pistonRod = new CylinderGeometry(0.0046, 0.0046, 0.05, Math.max(5, ring >> 1));
+  const led = new SphereGeometry(0.0056, Math.max(5, ring >> 2), Math.max(4, ring >> 2));
+
   const phalanx = new CapsuleGeometry(0.008, 0.014, 2, Math.max(5, ring >> 1));
   const knuckle = new SphereGeometry(0.0092, Math.max(6, ring >> 1), Math.max(4, ring >> 2));
 
   const all = [
     core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
-    facePlate, jawPlate, crownPlate, templeRing, templeCore,
+    facePlate, jawPlate, crownPlate, templeRing, templeCore, pistonBody, pistonRod, led,
   ];
   return {
     core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
-    facePlate, jawPlate, crownPlate, templeRing, templeCore,
+    facePlate, jawPlate, crownPlate, templeRing, templeCore, pistonBody, pistonRod, led,
     dispose: () => all.forEach((g) => g.dispose()),
   };
 }

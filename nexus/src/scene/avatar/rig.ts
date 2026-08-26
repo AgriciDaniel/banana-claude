@@ -15,25 +15,36 @@ import { clamp } from '@/core/math';
  */
 
 export const RIG = {
-  /** Total height is about 1.57 units -- a head shorter than a module card. */
-  footY: -0.85,
-  kneeY: -0.42,
-  chestY: 0.3,
-  neckY: 0.46,
-  headY: 0.605,
+  /**
+ * Proportions.
+ *
+ * About 1.66 units tall and a little over eight heads of it, where the first
+ * version was seven and a bit. That single ratio is most of what separates a
+ * figure that reads as athletic from one that reads as stocky: the legs carry
+ * 55% of the height rather than 52%, the neck is longer, the waist is
+ * narrower, and the head is smaller against the shoulders.
+ *
+ * Eight heads is the classical heroic figure rather than the average one, and
+ * that is deliberate -- this thing is meant to look built, not surveyed.
+ */
+  footY: -0.925,
+  kneeY: -0.462,
+  chestY: 0.305,
+  neckY: 0.482,
+  headY: 0.642,
   /** Half-height of the skull, for placing anything that sits on it. */
   headRadius: 0.11,
   /** How far forward the face sits, so the eyes and mouth clear the skull. */
   faceZ: 0.083,
 
-  shoulderY: 0.395,
-  shoulderX: 0.146,
-  upperArm: 0.315,
-  forearm: 0.285,
+  shoulderY: 0.404,
+  shoulderX: 0.152,
+  upperArm: 0.328,
+  forearm: 0.302,
 
-  hipX: 0.076,
-  thigh: 0.42,
-  shin: 0.4,
+  hipX: 0.067,
+  thigh: 0.462,
+  shin: 0.438,
 
   limbRadius: 0.037,
   armRadius: 0.031,

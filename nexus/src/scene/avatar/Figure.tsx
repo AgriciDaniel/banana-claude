@@ -73,7 +73,7 @@ const HOME: [number, number, number] = [-2.2, -0.05, 6.6];
  * standing beside content taller than itself, is also simply the right image:
  * it presents the room, it does not occupy it.
  */
-const FIGURE_SCALE = 0.68;
+const FIGURE_SCALE = 0.645;
 
 /**
  * Standing down.
@@ -195,6 +195,38 @@ export function Figure() {
        * very thing that is supposed to read as a hollow.
        */
       recess: makePlate({ plates: 0, colour: '#080B10', metalness: 0.12, roughness: 0.72 }),
+      /*
+       * Dark titanium, for the one arm the shell does not cover.
+       *
+       * The whole design turns on this asymmetry: a machine plated identically
+       * on both sides reads as a costume, and a machine with one limb opened up
+       * reads as something that was built and can be worked on. Metal, properly
+       * -- this is the one part that is meant to look like bare frame.
+       */
+      titanium: makePlate({ plates: 9, colour: '#2B313B', metalness: 0.92, roughness: 0.33, seam: '#3E7BFF' }),
+      /*
+       * The energy skin over the exposed hand. Liquid blue rather than the
+       * body's cyan, so the hand reads as the live element and not as one more
+       * lit seam.
+       */
+      energy: new MeshStandardMaterial({
+        color: new Color('#0A1E4A'),
+        emissive: new Color('#2E7BFF'),
+        emissiveIntensity: 2.4,
+        roughness: 0.18,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.82,
+      }),
+      /** The points let into the knuckles. Brighter and cooler than the skin. */
+      led: new MeshStandardMaterial({
+        color: new Color('#0B1A33'),
+        emissive: new Color('#BFE0FF'),
+        emissiveIntensity: 5,
+        roughness: 0.25,
+        metalness: 0,
+        transparent: true,
+      }),
       /*
        * Everything that lights up: eyes, temple rings, the vocal vent. One
        * material, so the whole face brightens and dims together -- and it is
@@ -344,7 +376,11 @@ export function Figure() {
      */
     if (root.current) {
       root.current.position.y = Math.sin(time * 1.35) * 0.006 + noise1(time * 0.21) * 0.012;
-      root.current.rotation.z = noise1(time * 0.17 + 4) * 0.02;
+      /*
+       * A standing tilt with the breathing drift on top of it. The pelvis is
+       * not level, because the weight is not evenly on both feet.
+       */
+      root.current.rotation.z = -0.026 + noise1(time * 0.17 + 4) * 0.02;
     }
 
     // What it is looking at: the thing on stage, or you.
@@ -386,6 +422,8 @@ export function Figure() {
         dt,
       );
       chest.current.rotation.x = damp(chest.current.rotation.x, -0.05 + show * 0.03, 5, dt);
+      /* Countering the pelvis: hips one way, shoulders the other. */
+      chest.current.rotation.z = damp(chest.current.rotation.z, 0.038, 4, dt);
     }
 
     // --- Arms ------------------------------------------------------------
@@ -494,6 +532,10 @@ export function Figure() {
       mouth.current.scale.set(1 - open * 0.12, 0.35 + open * 1.9, 1);
     }
     skins.optic.emissiveIntensity = here * (3.4 + jaw.value * 4.5);
+    skins.energy.emissiveIntensity = here * (2.2 + voice.level * 1.6);
+    skins.led.emissiveIntensity = here * (4.6 + voice.level * 3.2);
+    skins.energy.opacity = here * 0.82;
+    skins.led.opacity = here;
 
     // --- Eyes ------------------------------------------------------------
     /*
@@ -554,33 +596,63 @@ export function Figure() {
    * pointing hand is legible because three of its fingers are curled and one
    * is not, which needs joints to be true.
    */
-  const fingers = (places: FingerPlace[]) =>
+  const fingers = (places: FingerPlace[], bare: boolean) =>
     places.map((f, i) => (
       <group key={i} position={[f.x, -0.062, 0]} rotation={[f.curl, 0, 0]}>
-        <mesh material={skins.copper} geometry={mech.knuckle} />
+        <mesh material={bare ? skins.titanium : skins.copper} geometry={mech.knuckle} />
         <mesh
-          material={material}
+          material={bare ? skins.titanium : material}
           geometry={mech.phalanx}
           position={[0, -0.0155 * f.scale, 0]}
           scale={[1, f.scale, 1]}
         />
+        {/* A point let into each knuckle, on the exposed hand only. */}
+        {bare ? (
+          <mesh material={skins.led} geometry={mech.led} position={[0, -0.006, 0.0092]} />
+        ) : null}
         <group position={[0, -0.031 * f.scale, 0]} rotation={[f.curl * 0.6, 0, 0]}>
           <mesh
-            material={material}
+            material={bare ? skins.titanium : material}
             geometry={mech.phalanx}
             position={[0, -0.013 * f.scale, 0]}
             scale={[0.82, f.scale * 0.82, 0.82]}
           />
+          {bare ? (
+            <mesh
+              material={skins.led}
+              geometry={mech.led}
+              position={[0, -0.004, 0.0084]}
+              scale={0.85}
+            />
+          ) : null}
         </group>
       </group>
     ));
 
+  /*
+   * A piston across a joint. Body on one side, rod on the other, both offset
+   * behind the limb so the actuator sits where one actually would.
+   */
+  const piston = (side: -1 | 1, y: number, z: number, tilt: number) => (
+    <group position={[side * 0.028, y, z]} rotation={[tilt, 0, 0]}>
+      <mesh material={skins.copper} geometry={mech.pistonBody} />
+      <mesh material={skins.titanium} geometry={mech.pistonRod} position={[0, -0.03, 0]} />
+    </group>
+  );
+
+  /*
+   * `bare` is the asymmetry, and it is the point of the design rather than a
+   * detail of it: a machine plated identically on both sides reads as a
+   * costume, and a machine with one limb opened up reads as something that was
+   * built and can be worked on.
+   */
   const arm = (
     side: -1 | 1,
     shoulder: typeof shoulderL,
     elbow: typeof elbowL,
     open: typeof openL,
     curled: typeof curledL,
+    bare: boolean,
   ) => (
     <group ref={shoulder} position={[side * RIG.shoulderX, RIG.shoulderY, 0]}>
       {/*
@@ -602,7 +674,7 @@ export function Figure() {
         />
       </group>
       <mesh material={material} geometry={body.upperArm} />
-      {/* A light let into the forearm plate, as the references carry. */}
+      {/* A light let into the plate, as the references carry. */}
       <mesh
         material={skins.optic}
         geometry={mech.slot}
@@ -610,15 +682,25 @@ export function Figure() {
         rotation={[0.35, 0, 0]}
         scale={[0.8, 0.9, 1]}
       />
+      {/* The actuator across the elbow. */}
+      {piston(side, -RIG.upperArm * 0.72, -0.03, 0.12)}
       <group ref={elbow} position={[0, -RIG.upperArm, 0]}>
         <mesh material={skins.copper} geometry={body.tinyJoint} />
-        <mesh material={material} geometry={body.forearm} />
+        <mesh material={bare ? skins.titanium : material} geometry={body.forearm} />
         <group position={[0, -RIG.forearm, 0]}>
-          <mesh material={material} geometry={body.palm} />
+          {/*
+            The palm. On the exposed side it wears the energy skin instead of
+            shell: the frame is visible through it, which is the whole reason
+            the arm was opened up.
+          */}
+          <mesh material={bare ? skins.titanium : material} geometry={body.palm} />
+          {bare ? (
+            <mesh material={skins.energy} geometry={body.palm} scale={[1.14, 1.04, 1.5]} />
+          ) : null}
           <group ref={open} visible={false}>
-            {fingers(HAND_POINTING)}
+            {fingers(HAND_POINTING, bare)}
           </group>
-          <group ref={curled}>{fingers(HAND_RELAXED)}</group>
+          <group ref={curled}>{fingers(HAND_RELAXED, bare)}</group>
         </group>
       </group>
     </group>
@@ -659,14 +741,33 @@ export function Figure() {
       <pointLight position={[-0.85, 0.5, 0.7]} intensity={0.75} distance={2.4} decay={2} color="#BFE4FF" />
 
       <group ref={root}>
-        {/* Legs. Static: this figure stands, it never walks. */}
+        {/*
+          Legs. Static: this figure stands, it never walks.
+
+          But it does not stand to attention. The weight is on one leg -- that
+          leg straight and under the hip, the other softened and turned a few
+          degrees out -- and the pelvis tilts to follow. Contrapposto costs two
+          numbers here and it is the difference between a figure and a
+          mannequin: perfect bilateral symmetry is the one thing no living
+          body ever does.
+        */}
         {([-1, 1] as const).map((side) => (
-          <group key={side} position={[side * RIG.hipX, 0, 0]} rotation={[0.04, 0, side * 0.03]}>
+          <group
+            key={side}
+            position={[side * RIG.hipX, side < 0 ? 0.004 : -0.004, 0]}
+            rotation={[side < 0 ? 0.02 : 0.075, side * 0.05, side * 0.03]}
+          >
             <mesh material={skins.copper} geometry={body.joint} />
             <mesh material={material} geometry={body.thigh} />
+            {piston(side, -RIG.thigh * 0.78, -0.036, 0.1)}
             <group position={[0, -RIG.thigh, 0]} rotation={[-0.06, 0, 0]}>
               <mesh material={skins.copper} geometry={body.smallJoint} />
               <mesh material={material} geometry={body.shin} />
+              {/* And across the ankle. */}
+              <group position={[0, -RIG.shin * 0.82, -0.026]} scale={0.7}>
+                <mesh material={skins.copper} geometry={mech.pistonBody} />
+                <mesh material={skins.titanium} geometry={mech.pistonRod} position={[0, -0.03, 0]} />
+              </group>
               <mesh material={material} geometry={body.foot} position={[0, -RIG.shin, 0]} />
             </group>
           </group>
@@ -684,6 +785,62 @@ export function Figure() {
           <mesh material={skins.torso} geometry={mech.backPlate} />
           {[0.022, 0.068, 0.114, 0.16].map((y) => (
             <mesh key={y} material={skins.torso} geometry={mech.abBand} position={[0, y, 0]} />
+          ))}
+
+          {/*
+            The abdomen: copper across the gaps between the plates, with light
+            behind it.
+
+            The plates alone left the dark core showing as four flat bands,
+            which reads as a hole rather than as the flexible section it is
+            meant to be. Copper strapping across each gap, and a light either
+            side of it, turns the same gap into something articulated.
+          */}
+          {[
+            { y: 0.048, r: 0.084 },
+            { y: 0.094, r: 0.09 },
+            { y: 0.14, r: 0.098 },
+          ].map(({ y, r }) => (
+            <group key={y}>
+              <mesh
+                material={skins.copper}
+                geometry={mech.slot}
+                position={[0, y, r]}
+                scale={[3.1, 0.85, 1.2]}
+              />
+              {[-1, 1].map((side) => (
+                <mesh
+                  key={side}
+                  material={skins.optic}
+                  geometry={mech.slot}
+                  position={[side * 0.058, y, r * 0.86]}
+                  rotation={[0, side * 0.6, 0]}
+                  scale={[0.5, 0.7, 1]}
+                />
+              ))}
+            </group>
+          ))}
+
+          {/*
+            The energy matrix behind the chest plate. Laid out as a V rather
+            than a row: the spec calls for something interwoven, and a straight
+            line of lights reads as a status bar.
+          */}
+          {[
+            { x: -0.042, y: 0.318, s: 0.55 },
+            { x: -0.024, y: 0.295, s: 0.7 },
+            { x: 0, y: 0.278, s: 0.85 },
+            { x: 0.024, y: 0.295, s: 0.7 },
+            { x: 0.042, y: 0.318, s: 0.55 },
+          ].map(({ x, y, s: sc }) => (
+            <mesh
+              key={x}
+              material={skins.energy}
+              geometry={mech.slot}
+              position={[x, y, 0.126]}
+              rotation={[0, 0, x === 0 ? 0 : (x > 0 ? -1 : 1) * 0.7]}
+              scale={[sc, 1, 1]}
+            />
           ))}
 
           {/* Light let into the chest plate, and the spine behind it. */}
@@ -743,8 +900,10 @@ export function Figure() {
             </group>
           ))}
 
-          {arm(-1, shoulderL, elbowL, openL, curledL)}
-          {arm(1, shoulderR, elbowR, openR, curledR)}
+          {/* Its right, which is -X: the figure faces +Z, and for a body
+              facing +Z the right hand lies on the negative side. */}
+          {arm(-1, shoulderL, elbowL, openL, curledL, true)}
+          {arm(1, shoulderR, elbowR, openR, curledR, false)}
 
           <group ref={head} position={[0, RIG.headY, 0]} scale={[0.96, 1, 1.14]}>
             {/* Longer front to back than it is wide. Both references run the
