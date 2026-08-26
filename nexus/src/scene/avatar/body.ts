@@ -1,9 +1,14 @@
 import {
   BoxGeometry,
   CapsuleGeometry,
+  CatmullRomCurve3,
+  CylinderGeometry,
   LatheGeometry,
   SphereGeometry,
+  TorusGeometry,
+  TubeGeometry,
   Vector2,
+  Vector3,
   type BufferGeometry,
 } from 'three';
 
@@ -239,3 +244,167 @@ export const HAND_POINTING: FingerPlace[] = SPREAD.map((x, i) => ({
   curl: i === 0 ? -0.04 : -1.35 - i * 0.05,
   scale: i === 0 ? 1.25 : LENGTH[i]!,
 }));
+
+/**
+ * The mechanism under the shell.
+ *
+ * A plated machine is not a smooth body with lines drawn on it. It is a dark
+ * frame -- carbon, cable, actuator -- with white plates laid over the top, and
+ * every reference shows exactly where the plates stop: the neck, the flanks,
+ * the backs of the joints. That gap is the detail. Drawing seams on an unbroken
+ * surface can only ever suggest it.
+ *
+ * So the trunk is built the other way round from here on. The lathe that used
+ * to BE the torso becomes the core, and the white shell goes on over it as
+ * separate sectors that leave the core showing between them.
+ */
+
+/**
+ * A sector of a revolved profile, swollen outward.
+ *
+ * `swell` lifts every radius so the piece sits proud of whatever it covers --
+ * which is what makes it read as a plate laid on top rather than as a stripe
+ * painted on.
+ */
+function sector(
+  profile: Profile,
+  segments: number,
+  centre: number,
+  span: number,
+  swell: number,
+): BufferGeometry {
+  return lathe(
+    profile.map(([r, y]) => [r + swell, y] as [number, number]),
+    segments,
+    centre - span / 2,
+    span,
+  );
+}
+
+/** The trunk profile, so plates and core can be cut from the same curve. */
+function trunkProfile(rig: { chestY: number; neckY: number; shoulderY: number }): Profile {
+  return [
+    [0.082, -0.075],
+    [0.096, -0.03],
+    [0.099, 0.0],
+    [0.082, 0.075],
+    [0.081, 0.115],
+    [0.104, 0.185],
+    [0.122, 0.25],
+    [0.134, rig.chestY],
+    [0.145, rig.shoulderY],
+    [0.116, rig.shoulderY + 0.035],
+    [0.058, rig.neckY - 0.015],
+    [0.035, rig.neckY + 0.02],
+    [0.032, rig.neckY + 0.06],
+  ];
+}
+
+/** Cut a profile down to a height range, keeping the curve's own shape. */
+function slice(profile: Profile, from: number, to: number): Profile {
+  const at = (y: number): number => {
+    for (let i = 1; i < profile.length; i++) {
+      const [r0, y0] = profile[i - 1]!;
+      const [r1, y1] = profile[i]!;
+      if (y >= y0 && y <= y1) {
+        const t = y1 === y0 ? 0 : (y - y0) / (y1 - y0);
+        return r0 + (r1 - r0) * t;
+      }
+    }
+    return profile[profile.length - 1]![0];
+  };
+  const inner = profile.filter(([, y]) => y > from && y < to);
+  return [[at(from), from], ...inner, [at(to), to]];
+}
+
+export interface Mechanism {
+  /** The dark frame the plates are laid over. */
+  core: BufferGeometry;
+  /** Chest, abdomen and back: white shell, front and rear sectors. */
+  chestPlate: BufferGeometry;
+  backPlate: BufferGeometry;
+  abBand: BufferGeometry;
+  /** Cables running from the base of the skull into the shoulders. */
+  cable: BufferGeometry;
+  /** The circular units at the shoulder and the hip. */
+  disc: BufferGeometry;
+  collar: BufferGeometry;
+  discRing: BufferGeometry;
+  /** A lit slot, for the light let into a plate. */
+  slot: BufferGeometry;
+  /** Finger bones, three to a finger, and the knuckle between them. */
+  phalanx: BufferGeometry;
+  knuckle: BufferGeometry;
+  dispose: () => void;
+}
+
+export function buildMechanism(
+  segments: number,
+  rig: { chestY: number; neckY: number; shoulderY: number },
+): Mechanism {
+  const ring = Math.max(8, segments);
+  const trunk = trunkProfile(rig);
+
+  /* The core is the trunk itself, very slightly shrunk so nothing z-fights. */
+  const core = lathe(
+    trunk.map(([r, y]) => [r - 0.004, y] as [number, number]),
+    ring,
+  );
+
+  /*
+   * Front and back are separate pieces with a gap down each flank. That gap --
+   * the dark core showing between two white plates -- is the single detail that
+   * makes the difference between armour and a painted cylinder.
+   */
+  const FRONT = Math.PI / 2;
+  const chestPlate = sector(slice(trunk, 0.175, rig.shoulderY + 0.02), ring, FRONT, 2.62, 0.007);
+  const backPlate = sector(
+    slice(trunk, 0.16, rig.shoulderY + 0.02),
+    ring,
+    FRONT + Math.PI,
+    2.1,
+    0.007,
+  );
+  /* One band; the figure stacks three of them down the abdomen. */
+  const abBand = sector(slice(trunk, 0.0, 0.04), ring, FRONT, 2.62, 0.006);
+
+  /*
+   * Neck cables. Built once along a curve and placed four times -- the
+   * references run a bundle of them from the base of the skull down behind the
+   * collar, and a bundle is the point: one cable reads as a mistake.
+   */
+  /*
+   * Routed around the SIDE of the neck, not behind it. The first pass ran them
+   * down the back, which is where they belong on a real machine and where the
+   * viewer, who is standing in front, cannot see a single one of them.
+   */
+  const cable = new TubeGeometry(
+    new CatmullRomCurve3([
+      new Vector3(0.026, rig.neckY + 0.058, -0.006),
+      new Vector3(0.05, rig.neckY - 0.005, -0.014),
+      new Vector3(0.062, rig.shoulderY - 0.01, -0.004),
+      new Vector3(0.055, rig.chestY - 0.015, 0.02),
+    ]),
+    14,
+    0.0068,
+    Math.max(5, ring >> 1),
+    false,
+  );
+
+  const disc = new CylinderGeometry(0.042, 0.042, 0.02, ring);
+  /* The collar the cables gather into, at the base of the skull. */
+  const collar = new CylinderGeometry(0.046, 0.052, 0.026, ring);
+  const discRing = new TorusGeometry(0.03, 0.005, 6, ring);
+  const slot = new BoxGeometry(0.03, 0.008, 0.006);
+
+  const phalanx = new CapsuleGeometry(0.008, 0.014, 2, Math.max(5, ring >> 1));
+  const knuckle = new SphereGeometry(0.0092, Math.max(6, ring >> 1), Math.max(4, ring >> 2));
+
+  const all = [
+    core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
+  ];
+  return {
+    core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
+    dispose: () => all.forEach((g) => g.dispose()),
+  };
+}

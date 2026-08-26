@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   AdditiveBlending,
@@ -9,11 +9,14 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Quaternion,
+  SRGBColorSpace,
+  TextureLoader,
   Vector3,
   type Group,
   type Mesh,
+  type Texture,
 } from 'three';
-import { makePlate, setGlow } from './plating';
+import { makeFace, makePlate, setFace, setFaceCrop, setGlow } from './plating';
 import { PALETTE } from '@/config/theme';
 import { attention, interaction, voice } from '@/stores/runtime';
 import { useAssistantStore } from '@/stores/useAssistantStore';
@@ -23,7 +26,13 @@ import { Spring, Spring3 } from '@/animation/Spring';
 import { SPRINGS } from '@/animation/presets';
 import { clamp01, damp, noise1 } from '@/core/math';
 import { FORWARD, HEAD_CONE, REST_DIR, RIG, aimAt, clampToCone } from './rig';
-import { HAND_POINTING, HAND_RELAXED, buildBody, type FingerPlace } from './body';
+import {
+  HAND_POINTING,
+  HAND_RELAXED,
+  buildBody,
+  buildMechanism,
+  type FingerPlace,
+} from './body';
 import { figureReport } from './report';
 
 /**
@@ -98,6 +107,21 @@ const ASIDE_PRESENCE = 0.55;
  */
 const IDLE_PRESENCE = 0.88;
 
+/**
+ * The generated face.
+ *
+ * Made once by `npm run make:face` and cached to disk. The model answers in
+ * whatever format it likes, so both names are tried; absent either, the figure
+ * wears the plain visor and nothing breaks.
+ */
+const FACE_URLS = ['/avatar/face.jpg', '/avatar/face.png'];
+/**
+ * Sized to the skull it hangs on: the generated frame runs forehead to chin,
+ * and the head profile spans -0.1 to +0.104. Square, because the crop is.
+ */
+const FACE_W = 0.203;
+const FACE_H = 0.204;
+
 /** Below this the stage has nothing worth turning toward. */
 const POINT_THRESHOLD = 0.35;
 
@@ -141,6 +165,10 @@ export function Figure() {
   const body = useMemo(() => buildBody(segments, RIG), [segments]);
   useEffect(() => () => body.dispose(), [body]);
 
+  /* The frame under the plates: core, cables, discs, finger bones. */
+  const mech = useMemo(() => buildMechanism(segments, RIG), [segments]);
+  useEffect(() => () => mech.dispose(), [mech]);
+
   /*
    * The shells.
    *
@@ -168,6 +196,13 @@ export function Figure() {
        * head became a helmet.
        */
       copper: makePlate({ plates: 3, colour: '#C98A5B', metalness: 0.85, roughness: 0.42, seam: '#FFB27A' }),
+      /*
+       * The frame the shell is bolted to: dark, matte, and visible in every
+       * gap the plates leave -- the neck, the flanks, the backs of the joints.
+       * That gap is the detail. Seams drawn on an unbroken surface can only
+       * ever suggest it.
+       */
+      carbon: makePlate({ plates: 7, colour: '#1B2028', metalness: 0.65, roughness: 0.55 }),
       /** The band the optics sit in: glossy, near-black, no seams. */
       visor: makePlate({ plates: 0, colour: '#0A0D12', metalness: 0.3, roughness: 0.12 }),
       /*
@@ -238,6 +273,51 @@ export function Figure() {
   /** How committed the pose is to indicating something. */
   const showing = useMemo(() => new Spring(0, SPRINGS.glide), []);
   const jaw = useMemo(() => new Spring(0, SPRINGS.flash), []);
+
+  /*
+   * Loading it, and finding out how it was framed.
+   *
+   * The crop comes off the loaded image rather than from an assumption: the
+   * model answers square when asked and landscape when it feels like it, and a
+   * face stretched across a square plane is the loudest way to discover which
+   * happened.
+   */
+  const [face, setFaceTexture] = useState<Texture | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let loaded: Texture | null = null;
+    const loader = new TextureLoader();
+    const attempt = (index: number): void => {
+      if (index >= FACE_URLS.length) return;
+      loader.load(
+        FACE_URLS[index]!,
+        (texture) => {
+          if (!alive) {
+            texture.dispose();
+            return;
+          }
+          texture.colorSpace = SRGBColorSpace;
+          loaded = texture;
+          setFaceTexture(texture);
+        },
+        undefined,
+        () => attempt(index + 1),
+      );
+    };
+    attempt(0);
+    return () => {
+      alive = false;
+      loaded?.dispose();
+    };
+  }, []);
+
+  const faceSkin = useMemo(() => (face ? makeFace(face) : null), [face]);
+  useEffect(() => {
+    if (!faceSkin || !face) return undefined;
+    const image = face.image as { width?: number; height?: number } | undefined;
+    if (image?.width && image.height) setFaceCrop(faceSkin, image.width / image.height);
+    return () => faceSkin.dispose();
+  }, [faceSkin, face]);
 
   const blink = useRef({ next: 2.4, until: 0 });
   /** Speech envelope recovered from the text, for when there is no audio yet. */
@@ -462,9 +542,9 @@ export function Figure() {
       const open = jaw.value;
       mouth.current.scale.set(1 - open * 0.12, 0.35 + open * 1.9, 1);
     }
-    if (skins.optic.emissiveIntensity !== undefined) {
-      skins.optic.emissiveIntensity = here * (3.4 + jaw.value * 4.5);
-    }
+    skins.optic.emissiveIntensity = here * (3.4 + jaw.value * 4.5);
+    /* The painted face does its own talking: the rows around its lips stretch. */
+    if (faceSkin) setFace(faceSkin, jaw.value, here);
 
     // --- Eyes ------------------------------------------------------------
     /*
@@ -517,15 +597,32 @@ export function Figure() {
     }
   });
 
+  /*
+   * Fingers with bones in them.
+   *
+   * One capsule per finger was a peg. A finger is a knuckle and two segments
+   * that fold at different rates, and it is the SECOND fold that reads: a
+   * pointing hand is legible because three of its fingers are curled and one
+   * is not, which needs joints to be true.
+   */
   const fingers = (places: FingerPlace[]) =>
     places.map((f, i) => (
       <group key={i} position={[f.x, -0.062, 0]} rotation={[f.curl, 0, 0]}>
+        <mesh material={skins.copper} geometry={mech.knuckle} />
         <mesh
           material={material}
-          geometry={body.finger}
-          position={[0, -0.0265 * f.scale, 0]}
+          geometry={mech.phalanx}
+          position={[0, -0.0155 * f.scale, 0]}
           scale={[1, f.scale, 1]}
         />
+        <group position={[0, -0.031 * f.scale, 0]} rotation={[f.curl * 0.6, 0, 0]}>
+          <mesh
+            material={material}
+            geometry={mech.phalanx}
+            position={[0, -0.013 * f.scale, 0]}
+            scale={[0.82, f.scale * 0.82, 0.82]}
+          />
+        </group>
       </group>
     ));
 
@@ -544,7 +641,26 @@ export function Figure() {
         torso and nothing bridges the gap it leaves.
       */}
       <mesh material={skins.copper} geometry={body.joint} />
+      {/* The deltoid cap, with its ring lit. */}
+      <group position={[side * 0.012, 0.004, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <mesh material={skins.shell} geometry={mech.disc} scale={0.86} />
+        <mesh
+          material={skins.optic}
+          geometry={mech.discRing}
+          position={[0, side * 0.011, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+          scale={0.8}
+        />
+      </group>
       <mesh material={material} geometry={body.upperArm} />
+      {/* A light let into the forearm plate, as the references carry. */}
+      <mesh
+        material={skins.optic}
+        geometry={mech.slot}
+        position={[side * 0.022, -RIG.upperArm * 0.55, 0.026]}
+        rotation={[0.35, 0, 0]}
+        scale={[0.8, 0.9, 1]}
+      />
       <group ref={elbow} position={[0, -RIG.upperArm, 0]}>
         <mesh material={skins.copper} geometry={body.tinyJoint} />
         <mesh material={material} geometry={body.forearm} />
@@ -589,7 +705,7 @@ export function Figure() {
         source in front and above, close enough to fall off before it reaches
         anything else in the scene.
       */}
-      <pointLight position={[0.62, 1.05, 1.15]} intensity={2.1} distance={3.0} decay={2} color="#FFF4E6" />
+      <pointLight position={[0.48, 1.02, 0.95]} intensity={2.6} distance={3.0} decay={2} color="#FFF4E6" />
       {/* And a cool fill from the other side, so the shadow side is not dead. */}
       <pointLight position={[-0.85, 0.5, 0.7]} intensity={0.75} distance={2.4} decay={2} color="#BFE4FF" />
 
@@ -608,7 +724,75 @@ export function Figure() {
         ))}
 
         <group ref={chest}>
-          <mesh material={skins.torso} geometry={body.torso} />
+          {/*
+            The trunk: a dark core with white shell laid over it, front and
+            back, leaving a gap down each flank. Three bands across the
+            abdomen, because a single piece there cannot bend and reads as a
+            barrel.
+          */}
+          <mesh material={skins.carbon} geometry={mech.core} />
+          <mesh material={skins.torso} geometry={mech.chestPlate} />
+          <mesh material={skins.torso} geometry={mech.backPlate} />
+          {[0.022, 0.068, 0.114, 0.16].map((y) => (
+            <mesh key={y} material={skins.torso} geometry={mech.abBand} position={[0, y, 0]} />
+          ))}
+
+          {/* Light let into the chest plate, and the spine behind it. */}
+          {[-1, 1].map((side) => (
+            <mesh
+              key={side}
+              material={skins.optic}
+              geometry={mech.slot}
+              position={[side * 0.052, 0.285, 0.115]}
+              rotation={[0, side * 0.42, 0]}
+            />
+          ))}
+          {[0.09, 0.14, 0.19].map((y) => (
+            <mesh
+              key={y}
+              material={skins.optic}
+              geometry={mech.slot}
+              position={[0, y, -0.098]}
+              rotation={[0, Math.PI, 0]}
+              scale={[0.7, 0.8, 1]}
+            />
+          ))}
+
+          {/*
+            Neck cables. A bundle, not a cable: the references run four or five
+            from the base of the skull down behind the collar, and one on its
+            own reads as a mistake rather than as an anatomy.
+          */}
+          {[
+            { x: 1, s: 1, copper: false },
+            { x: -1, s: 1, copper: false },
+            { x: 1, s: 0.82, copper: true },
+            { x: -1, s: 0.82, copper: true },
+          ].map((c, i) => (
+            <mesh
+              key={i}
+              material={c.copper ? skins.copper : skins.carbon}
+              geometry={mech.cable}
+              scale={[c.x * c.s, 1, c.s]}
+            />
+          ))}
+
+          {/* The collar they gather into. */}
+          <mesh material={skins.copper} geometry={mech.collar} position={[0, RIG.neckY + 0.03, 0]} />
+
+          {/* Hip units. Every reference puts a disc here, and it is what stops
+              the pelvis reading as the bottom of a tube. */}
+          {([-1, 1] as const).map((side) => (
+            <group key={side} position={[side * 0.096, 0.01, 0.008]} rotation={[0, 0, Math.PI / 2]}>
+              <mesh material={skins.shell} geometry={mech.disc} />
+              <mesh
+                material={skins.optic}
+                geometry={mech.discRing}
+                position={[0, side * 0.011, 0]}
+                rotation={[Math.PI / 2, 0, 0]}
+              />
+            </group>
+          ))}
 
           {arm(-1, shoulderL, elbowL, openL, curledL)}
           {arm(1, shoulderR, elbowR, openR, curledR)}
@@ -622,23 +806,38 @@ export function Figure() {
               at this scale lands in the uncanny valley, and this figure has no
               business being mistaken for a person.
             */}
-            {/*
-              The visor, and the optics sitting in it.
-              A face at this size is two lights and a line -- the references
-              carry a helmet with a dark band and a pair of glowing eyes, and
-              that is exactly as much face as forty pixels can hold. Anything
-              modelled finer becomes noise before it becomes a feature.
-            */}
-            <mesh material={skins.visor} position={[0, 0.015, RIG.faceZ - 0.012]}>
-              <boxGeometry args={[0.126, 0.036, 0.05]} />
-            </mesh>
-            <group ref={eyes} position={[0, 0.017, RIG.faceZ + 0.008]}>
-              {([-1, 1] as const).map((side) => (
-                <mesh key={side} material={skins.optic} position={[side * 0.031, 0, 0]}>
-                  <capsuleGeometry args={[0.0072, 0.019, 2, 8]} />
+            {faceSkin ? (
+              /*
+               * The generated face, lying flat against the front of the skull.
+               *
+               * Flat rather than wrapped: the head turns about fifty degrees at
+               * most, and a plane foreshortens across that range much the way a
+               * face does. Wrapping it onto a sphere sector would follow the
+               * curvature and cost the features their proportions, which at
+               * this size is the whole of the face.
+               */
+              <mesh material={faceSkin} position={[0, 0.002, RIG.faceZ + 0.003]}>
+                <planeGeometry args={[FACE_W, FACE_H]} />
+              </mesh>
+            ) : (
+              /*
+               * No generated face: a visor and two optics. At forty pixels a
+               * face is two lights and a line, and that is a perfectly good
+               * face -- it simply is not the one the references carry.
+               */
+              <>
+                <mesh material={skins.visor} position={[0, 0.015, RIG.faceZ - 0.012]}>
+                  <boxGeometry args={[0.126, 0.036, 0.05]} />
                 </mesh>
-              ))}
-            </group>
+                <group ref={eyes} position={[0, 0.017, RIG.faceZ + 0.008]}>
+                  {([-1, 1] as const).map((side) => (
+                    <mesh key={side} material={skins.optic} position={[side * 0.031, 0, 0]}>
+                      <capsuleGeometry args={[0.0072, 0.019, 2, 8]} />
+                    </mesh>
+                  ))}
+                </group>
+              </>
+            )}
 
             {/* Temple units. Every reference has them, and they are what stops
                 a smooth helmet reading as an egg. */}
@@ -654,12 +853,17 @@ export function Figure() {
             ))}
 
             {/*
-              The mouth: a vent under the jaw that lights and opens on speech.
-              A machine of this kind has no lips, and the references put the
-              vocal element exactly here -- a lit bar across the lower face.
+              The vocal vent. It used to BE the mouth; with a painted face that
+              opens on its own it becomes what the references actually show --
+              a lit bar under the jaw that answers the voice. Two signals for
+              one thing, which is what makes speech read at this size.
             */}
-            <mesh ref={mouth} material={skins.optic} position={[0, -0.052, RIG.faceZ - 0.008]}>
-              <boxGeometry args={[0.052, 0.016, 0.02]} />
+            <mesh
+              ref={mouth}
+              material={skins.optic}
+              position={[0, faceSkin ? -0.096 : -0.052, RIG.faceZ - (faceSkin ? 0.03 : 0.008)]}
+            >
+              <boxGeometry args={[0.044, 0.012, 0.018]} />
             </mesh>
           </group>
         </group>

@@ -7,3 +7,4 @@ next-env.d.ts
 .DS_Store
 public/models/
 public/mediapipe/
+public/avatar/

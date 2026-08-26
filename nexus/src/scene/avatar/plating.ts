@@ -1,4 +1,4 @@
-import { Color, MeshStandardMaterial } from 'three';
+import { Color, MeshStandardMaterial, type Texture } from 'three';
 import { PALETTE } from '@/config/theme';
 
 /**
@@ -118,4 +118,127 @@ export function setGlow(material: MeshStandardMaterial, glow: number): void {
     | { uniforms: { uGlow?: { value: number } } }
     | undefined;
   if (shader?.uniforms.uGlow) shader.uniforms.uGlow.value = glow;
+}
+
+/**
+ * The face.
+ *
+ * The body is lathed -- profiles revolved around an axis -- and a lathe is
+ * rotationally symmetric by construction. It can give a skull; it can never
+ * give a brow, a nose or a mouth. So the face is a generated image, and this is
+ * the material that makes it belong to the body rather than sit on top of it.
+ *
+ * Lit, not added. The earlier holographic face was drawn additively, which was
+ * right on a translucent figure and wrong the moment the shell became opaque
+ * ceramic: an additive face floats in front of a solid head instead of being
+ * part of it. Here it goes through the same standard shading as every plate, so
+ * the room's key light falls across it and it turns with the head correctly.
+ *
+ * Three things are injected:
+ *
+ *   - The mouth opens. The rows around the lips are stretched downward on the
+ *     speech envelope, and a dark gap is painted into the parting. This is the
+ *     only way a still image can speak, and it is why the prompt insists the
+ *     generated mouth arrives closed.
+ *   - The frame's corners are masked away with an ellipse. A rectangle cannot
+ *     end abruptly on a face.
+ *   - Only the coloured lights glow. Feeding the whole image to an emissive map
+ *     would light the white shell as brightly as the optics; keying the
+ *     emissive on SATURATION picks out exactly the amber eyes, the cyan seams
+ *     and the violet brow bar, and leaves the ceramic to the key light.
+ */
+export function makeFace(map: Texture): MeshStandardMaterial {
+  const material = new MeshStandardMaterial({
+    color: new Color('#FFFFFF'),
+    roughness: 0.3,
+    metalness: 0.05,
+    transparent: true,
+  });
+  material.defines = { ...(material.defines ?? {}), USE_UV: '' };
+
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFace = { value: map };
+    shader.uniforms.uJaw = { value: 0 };
+    shader.uniforms.uAlpha = { value: 1 };
+    shader.uniforms.uCrop = { value: 1 };
+    material.userData.shader = shader;
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform sampler2D uFace;
+        uniform float uJaw;
+        uniform float uAlpha;
+        uniform float uCrop;
+        vec4 faceSample;`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+
+        /*
+         * Mirrored in x: the figure faces +Z and is seen from +Z, which
+         * reverses left and right. Cropped to the centre square, so a frame
+         * that comes back landscape loses its sides rather than stretching.
+         */
+        vec2 faceUv = vec2(0.5 - (vUv.x - 0.5) * uCrop, vUv.y);
+
+        /*
+         * Open the mouth. Sampling from further UP the image drags the content
+         * DOWN, so the lips and the chin below them stretch apart. Bounded to a
+         * disc around the mouth, or the whole lower face would slide.
+         */
+        float atMouth = 1.0 - smoothstep(0.0, 0.135, distance(vUv, vec2(0.5, 0.235)));
+        faceUv.y += atMouth * uJaw * 0.052;
+
+        faceSample = texture2D(uFace, faceUv);
+        diffuseColor.rgb *= faceSample.rgb;
+
+        // The parting itself: dark, and only as wide as the mouth.
+        float gap = (1.0 - smoothstep(0.0, 0.05, abs(vUv.y - 0.222)))
+                  * (1.0 - smoothstep(0.055, 0.1, abs(vUv.x - 0.5)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.015, 0.012, 0.01), gap * uJaw * 0.92);
+
+        // The frame's corners, taken out with an ellipse.
+        vec2 edge = (vUv - 0.5) * vec2(2.06, 1.94);
+        diffuseColor.a *= (1.0 - smoothstep(0.74, 1.0, length(edge))) * uAlpha;`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+
+        float hi = max(max(faceSample.r, faceSample.g), faceSample.b);
+        float lo = min(min(faceSample.r, faceSample.g), faceSample.b);
+        float sat = hi > 0.001 ? (hi - lo) / hi : 0.0;
+        totalEmissiveRadiance += faceSample.rgb * smoothstep(0.22, 0.55, sat) * 2.6;`,
+      );
+  };
+
+  material.customProgramCacheKey = () => 'figure-face';
+  return material;
+}
+
+/** Drive the face: how far the mouth is open, and how present the body is. */
+export function setFace(material: MeshStandardMaterial, jaw: number, alpha: number): void {
+  const shader = material.userData.shader as
+    | { uniforms: { uJaw?: { value: number }; uAlpha?: { value: number } } }
+    | undefined;
+  if (!shader) return;
+  if (shader.uniforms.uJaw) shader.uniforms.uJaw.value = jaw;
+  if (shader.uniforms.uAlpha) shader.uniforms.uAlpha.value = alpha;
+}
+
+/**
+ * Tell the face how much of its frame to use.
+ *
+ * Read off the loaded image rather than assumed: the model answers square when
+ * asked to and landscape when it feels like it, and a face stretched across a
+ * square plane is the loudest possible way to discover which happened.
+ */
+export function setFaceCrop(material: MeshStandardMaterial, aspect: number): void {
+  const shader = material.userData.shader as
+    | { uniforms: { uCrop?: { value: number } } }
+    | undefined;
+  if (shader?.uniforms.uCrop) shader.uniforms.uCrop.value = aspect > 1 ? 1 / aspect : 1;
 }
