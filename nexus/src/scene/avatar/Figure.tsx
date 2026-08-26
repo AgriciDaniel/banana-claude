@@ -630,6 +630,29 @@ export function Figure() {
     ));
 
   /*
+   * A capped joint: a disc set into the side of the limb with its ring lit.
+   *
+   * Written once because the shoulder and the elbow must be the same thing at
+   * two sizes. Duplicating it was what let them drift apart in the first place.
+   */
+  const cap = (side: -1 | 1, y: number, size: number, bare: boolean) => (
+    <group position={[side * 0.012, y, 0]} rotation={[0, 0, Math.PI / 2]}>
+      <mesh
+        material={bare ? skins.titanium : skins.shell}
+        geometry={mech.disc}
+        scale={size}
+      />
+      <mesh
+        material={bare ? skins.energy : skins.optic}
+        geometry={mech.discRing}
+        position={[0, side * 0.011 * size, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+        scale={size * 0.93}
+      />
+    </group>
+  );
+
+  /*
    * A piston across a joint. Body on one side, rod on the other, both offset
    * behind the limb so the actuator sits where one actually would.
    */
@@ -662,17 +685,7 @@ export function Figure() {
         torso and nothing bridges the gap it leaves.
       */}
       <mesh material={skins.copper} geometry={body.joint} />
-      {/* The deltoid cap, with its ring lit. */}
-      <group position={[side * 0.012, 0.004, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <mesh material={skins.shell} geometry={mech.disc} scale={0.86} />
-        <mesh
-          material={skins.optic}
-          geometry={mech.discRing}
-          position={[0, side * 0.011, 0]}
-          rotation={[Math.PI / 2, 0, 0]}
-          scale={0.8}
-        />
-      </group>
+      {cap(side, 0.004, 0.86, bare)}
       <mesh material={material} geometry={body.upperArm} />
       {/* A light let into the plate, as the references carry. */}
       <mesh
@@ -686,6 +699,14 @@ export function Figure() {
       {piston(side, -RIG.upperArm * 0.72, -0.03, 0.12)}
       <group ref={elbow} position={[0, -RIG.upperArm, 0]}>
         <mesh material={skins.copper} geometry={body.tinyJoint} />
+        {/*
+          The elbow gets the shoulder's treatment.
+          It was a bare ball where the deltoid had a capped, lit disc, and the
+          arm read as finished at the top and unfinished halfway down. Whatever
+          rule the shoulder follows, the joint below it has to follow too --
+          otherwise the limb has two grammars in it.
+        */}
+        {cap(side, 0, 0.6, bare)}
         <mesh material={bare ? skins.titanium : material} geometry={body.forearm} />
         <group position={[0, -RIG.forearm, 0]}>
           {/*
@@ -884,7 +905,26 @@ export function Figure() {
           ))}
 
           {/* The collar they gather into. */}
-          <mesh material={skins.copper} geometry={mech.collar} position={[0, RIG.neckY + 0.03, 0]} />
+          <mesh material={skins.copper} geometry={mech.collar} position={[0, RIG.neckY + 0.012, 0]} />
+
+          {/*
+            And the neck itself, as a column.
+            It was a smooth cone -- the one joint on the whole body still
+            pretending it did not articulate, while the shoulder and now the
+            elbow both say plainly that they do. Three segments narrowing
+            upward, each with its ring, and the head turns on the top of them.
+          */}
+          {[0, 1, 2].map((i) => (
+            <group key={i} position={[0, RIG.neckY + 0.036 + i * 0.021, 0]}>
+              <mesh material={skins.titanium} geometry={mech.vertebra} scale={1 - i * 0.11} />
+              <mesh
+                material={skins.copper}
+                geometry={mech.vertebraRing}
+                rotation={[Math.PI / 2, 0, 0]}
+                scale={1 - i * 0.11}
+              />
+            </group>
+          ))}
 
           {/* Hip units. Every reference puts a disc here, and it is what stops
               the pelvis reading as the bottom of a tube. */}

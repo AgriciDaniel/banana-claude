@@ -185,10 +185,18 @@ export function buildBody(segments: number, rig: {
   );
 
   /* Deltoid to elbow, elbow to wrist, hip to knee, knee to ankle. */
-  const upperArm = lathe(limb(rig.upperArm, 0.047, 0.039, 0.028, 0.4), ring);
-  const forearm = lathe(limb(rig.forearm, 0.034, 0.032, 0.019, 0.25), ring);
-  const thigh = lathe(limb(rig.thigh, 0.07, 0.062, 0.036, 0.22), ring);
-  const shin = lathe(limb(rig.shin, 0.044, 0.046, 0.02, 0.28), ring);
+  /*
+   * Athletic is length AND belly, not girth.
+   *
+   * Thickening a limb evenly makes it heavy; the athletic read comes from the
+   * limb staying long and narrow at both joints while the muscle swells in
+   * between. So every one of these keeps its wrist, its ankle and its elbow
+   * exactly where they were, and only the belly moves.
+   */
+  const upperArm = lathe(limb(rig.upperArm, 0.047, 0.0445, 0.028, 0.42), ring);
+  const forearm = lathe(limb(rig.forearm, 0.034, 0.0345, 0.018, 0.24), ring);
+  const thigh = lathe(limb(rig.thigh, 0.07, 0.069, 0.035, 0.26), ring);
+  const shin = lathe(limb(rig.shin, 0.044, 0.0505, 0.019, 0.3), ring);
 
   /* A foot, so the legs stop somewhere instead of just ending. */
   const foot = new BoxGeometry(0.05, 0.028, 0.115);
@@ -294,13 +302,13 @@ function trunkProfile(rig: { chestY: number; neckY: number; shoulderY: number })
     [0.074, -0.078],
     [0.088, -0.032],
     [0.091, 0.0],
-    [0.073, 0.078],
-    [0.071, 0.12],
-    [0.098, 0.192],
-    [0.12, 0.256],
-    [0.135, rig.chestY],
-    [0.149, rig.shoulderY],
-    [0.118, rig.shoulderY + 0.038],
+    [0.0695, 0.078],
+    [0.0685, 0.12],
+    [0.1, 0.192],
+    [0.128, 0.256],
+    [0.144, rig.chestY],
+    [0.158, rig.shoulderY],
+    [0.122, rig.shoulderY + 0.038],
     [0.055, rig.neckY - 0.02],
     [0.032, rig.neckY + 0.02],
     [0.03, rig.neckY + 0.062],
@@ -336,6 +344,8 @@ export interface Mechanism {
   /** The circular units at the shoulder and the hip. */
   disc: BufferGeometry;
   collar: BufferGeometry;
+  vertebra: BufferGeometry;
+  vertebraRing: BufferGeometry;
   discRing: BufferGeometry;
   /** A lit slot, for the light let into a plate. */
   slot: BufferGeometry;
@@ -439,6 +449,17 @@ export function buildMechanism(
   const disc = new CylinderGeometry(0.042, 0.042, 0.02, ring);
   /* The collar the cables gather into, at the base of the skull. */
   const collar = new CylinderGeometry(0.046, 0.052, 0.026, ring);
+  /*
+   * The neck, as a column rather than a collar.
+   *
+   * One ring at the base said "something joins here" and nothing more. A neck
+   * that turns has to be made of pieces that can turn against each other, and
+   * three stacked segments narrowing upward say that at a glance -- the same
+   * argument as the elbow and the shoulder, applied to the one joint that was
+   * still a smooth cone.
+   */
+  const vertebra = new CylinderGeometry(0.031, 0.035, 0.019, ring);
+  const vertebraRing = new TorusGeometry(0.034, 0.0044, 6, ring);
   const discRing = new TorusGeometry(0.03, 0.005, 6, ring);
   const slot = new BoxGeometry(0.03, 0.008, 0.006);
 
@@ -452,10 +473,12 @@ export function buildMechanism(
   const all = [
     core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
     facePlate, jawPlate, crownPlate, templeRing, templeCore, pistonBody, pistonRod, led,
+    vertebra, vertebraRing,
   ];
   return {
     core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
     facePlate, jawPlate, crownPlate, templeRing, templeCore, pistonBody, pistonRod, led,
+    vertebra, vertebraRing,
     dispose: () => all.forEach((g) => g.dispose()),
   };
 }
