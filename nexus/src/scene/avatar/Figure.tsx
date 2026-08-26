@@ -1,24 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   AdditiveBlending,
-  ClampToEdgeWrapping,
   Color,
   DoubleSide,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   Quaternion,
-  SRGBColorSpace,
-  ShaderMaterial,
-  TextureLoader,
-  Vector2,
   Vector3,
   type Group,
   type Mesh,
-  type Texture,
 } from 'three';
-import { FACE_FRAG, FACE_VERT, FIGURE_FRAG, FIGURE_VERT } from '@/shaders/figure';
+import { makePlate, setGlow } from './plating';
 import { PALETTE } from '@/config/theme';
 import { attention, interaction, voice } from '@/stores/runtime';
 import { useAssistantStore } from '@/stores/useAssistantStore';
@@ -95,32 +90,13 @@ const ASIDE_PRESENCE = 0.55;
  *
  * It used to appear only on waking, which meant that most of the time the
  * assistant had no body at all -- and a presence you have to summon before you
- * can see it is not a presence. So it stands there, dim, once the room has
- * booted, and comes up to full when it is spoken to or has something to show.
- */
-const IDLE_PRESENCE = 0.5;
-
-/**
- * The generated face.
+ * can see it is not a presence. So it stands there once the room has booted,
+ * and its lights come up when it is spoken to or has something to show.
  *
- * A face is the one part of a human figure that lathed profiles cannot reach.
- * They give a skull, a jaw and a silhouette; they do not give eyes, and at the
- * size this figure stands the whole difference between "a head" and "a face"
- * is in the eyes. So the face is an image, made once by the same model the
- * assistant uses for everything else and cached to disk -- see
- * `npm run make:face`. Absent, the abstract marks stand in and nothing breaks.
- *
- * The source frame is landscape with the face centred, so half its width is
- * cropped away. The horizontal repeat is NEGATIVE to mirror it: the figure
- * faces +Z and is seen from +Z, which reverses left and right.
+ * High, now that presence means opacity on a solid body: at a half it was a
+ * ghost of a robot, which is neither one thing nor the other.
  */
-const FACE_URL = '/avatar/face.png';
-const FACE_CROP = 0.5;
-/** Sized to the skull, hung just clear of its frontmost point. */
-const FACE_W = 0.196;
-const FACE_H = 0.213;
-/** Where the painted mouth falls on that plane, measured off the image. */
-const FACE_MOUTH_Y = -0.068;
+const IDLE_PRESENCE = 0.88;
 
 /** Below this the stage has nothing worth turning toward. */
 const POINT_THRESHOLD = 0.35;
@@ -165,89 +141,59 @@ export function Figure() {
   const body = useMemo(() => buildBody(segments, RIG), [segments]);
   useEffect(() => () => body.dispose(), [body]);
 
-  const uniforms = useMemo(
+  /*
+   * The shells.
+   *
+   * Not one material but four, because a machine is not uniformly divided: a
+   * forearm is broken into more plates than a chest, and a helmet into none at
+   * all. They differ only in how often the shell is cut and what colour sits in
+   * the cut -- everything about the way light lands on them is stock, which is
+   * the whole reason these are patched standard materials and not a shader of
+   * my own. See plating.ts.
+   */
+  const skins = useMemo(
     () => ({
-      uTime: { value: 0 },
-      uLevel: { value: 0 },
-      uPresence: { value: 0 },
-      uFootY: { value: HOME[1] + RIG.footY * FIGURE_SCALE },
-      uColor: { value: new Color(PALETTE.core) },
-      uHot: { value: new Color(PALETTE.signal) },
+      /** Limbs, joints, hands, feet: the most divided parts. */
+      shell: makePlate({ plates: 5 }),
+      /** The trunk. Fewer, larger plates, as a chest piece would be. */
+      torso: makePlate({ plates: 4 }),
+      /** The helmet is unbroken. A seam across a face is a crack in it. */
+      helmet: makePlate({ plates: 0, roughness: 0.24, metalness: 0.45 }),
+      /*
+       * Copper, for the parts that are not shell: the neck run and the joints
+       * behind the plates. Every reference sets a second, warmer metal against
+       * the white, and it is what stops the figure reading as one moulded
+       * object. Hair used to be here -- it was the strongest way to say
+       * "person" in a silhouette, and it stopped making sense the moment the
+       * head became a helmet.
+       */
+      copper: makePlate({ plates: 3, colour: '#C98A5B', metalness: 0.85, roughness: 0.42, seam: '#FFB27A' }),
+      /** The band the optics sit in: glossy, near-black, no seams. */
+      visor: makePlate({ plates: 0, colour: '#0A0D12', metalness: 0.3, roughness: 0.12 }),
+      /*
+       * Everything that lights up: eyes, temple rings, the vocal vent. One
+       * material, so the whole face brightens and dims together -- and it is
+       * emissive rather than plated, because a light is not a surface with a
+       * seam in it.
+       */
+      optic: new MeshStandardMaterial({
+        color: new Color('#08131A'),
+        emissive: new Color(PALETTE.signal),
+        emissiveIntensity: 3.2,
+        roughness: 0.3,
+        metalness: 0,
+        transparent: true,
+      }),
     }),
     [],
   );
-
-  /*
-   * Three skins, one set of uniforms.
-   *
-   * The body is not uniform: a plated forearm, the suit under the chest and a
-   * fall of hair should not catch light the same way. Each skin therefore owns
-   * its own `uPlates` and `uShell`, while spreading the shared uniforms by
-   * reference -- the objects inside `uniforms` are the very same holders, so
-   * the frame loop still writes the time, the speech level and the presence
-   * once and all three follow.
-   *
-   * Built as objects and handed to each mesh by prop. Declared as JSX and
-   * reused, the meshes came out with no material at all and simply were not
-   * drawn: the face, which uses ordinary basic materials, rendered on its own
-   * in mid-air exactly where the head should have been.
-   */
-  const skins = useMemo(() => {
-    const make = (rings: number, shell: number) =>
-      new ShaderMaterial({
-        vertexShader: FIGURE_VERT,
-        fragmentShader: FIGURE_FRAG,
-        uniforms: { ...uniforms, uRings: { value: rings }, uShell: { value: shell } },
-        transparent: true,
-        depthWrite: false,
-        blending: AdditiveBlending,
-        side: DoubleSide,
-      });
-    return {
-      /*
-       * The body, all of it, on one contour density.
-       *
-       * There were three skins when the surface was plating, because a plated
-       * forearm and the suit beneath the chest are different objects. Contours
-       * are the opposite proposition: they describe one continuous form, and
-       * the instant the trunk and the arm are cut at different intervals the
-       * form comes apart again. So the whole body shares this one.
-       */
-      body: make(340, 1),
-      /*
-       * The skull, cut far more coarsely than the rest.
-       *
-       * Measured: the head lands about forty pixels tall on screen, and at the
-       * body's contour spacing that is a dozen rings across a face. No face
-       * survives that -- the eyes and the mouth simply became two more stripes.
-       * Six or seven rings still read as the same scanned surface and leave the
-       * features somewhere to be.
-       */
-      head: make(130, 1),
-      /*
-       * And the skull with no contours at all, for when a generated face is
-       * hanging on the front of it.
-       *
-       * Everything here is additive, so a ring crossing the face does not cover
-       * it -- it ADDS to it, and the eyes came out with bright bars laid across
-       * them. When there is a real face, the skull's job is to be a silhouette
-       * behind it and nothing more.
-       */
-      headBare: make(0, 0.5),
-      /** Hair is not built and does not get the same treatment. */
-      hair: make(150, 0.35),
-    };
-  }, [uniforms]);
   useEffect(
     () => () => {
-      skins.body.dispose();
-      skins.head.dispose();
-      skins.headBare.dispose();
-      skins.hair.dispose();
+      Object.values(skins).forEach((m) => m.dispose());
     },
     [skins],
   );
-  const material = skins.body;
+  const material = skins.shell;
 
   /*
    * The plinth it stands on.
@@ -293,54 +239,6 @@ export function Figure() {
   const showing = useMemo(() => new Spring(0, SPRINGS.glide), []);
   const jaw = useMemo(() => new Spring(0, SPRINGS.flash), []);
 
-  const [face, setFace] = useState<Texture | null>(null);
-  /*
-   * The face gets its own material rather than a plain textured plane, so the
-   * frame's corners can be masked away. See FACE_FRAG.
-   */
-  const faceSkin = useMemo(() => {
-    if (!face) return null;
-    return new ShaderMaterial({
-      vertexShader: FACE_VERT,
-      fragmentShader: FACE_FRAG,
-      uniforms: {
-        uMap: { value: face },
-        uOffset: { value: new Vector2(0.5 + FACE_CROP / 2, 0) },
-        uRepeat: { value: new Vector2(-FACE_CROP, 1) },
-        uOpacity: { value: 0.9 },
-      },
-      transparent: true,
-      depthWrite: false,
-      blending: AdditiveBlending,
-    });
-  }, [face]);
-  useEffect(() => () => faceSkin?.dispose(), [faceSkin]);
-  useEffect(() => {
-    let alive = true;
-    let loaded: Texture | null = null;
-    new TextureLoader().load(
-      FACE_URL,
-      (texture) => {
-        if (!alive) {
-          texture.dispose();
-          return;
-        }
-        texture.colorSpace = SRGBColorSpace;
-        texture.wrapS = ClampToEdgeWrapping;
-        loaded = texture;
-        setFace(texture);
-      },
-      undefined,
-      () => {
-        /* No face on disk. The abstract one stands, and that is a fine state. */
-      },
-    );
-    return () => {
-      alive = false;
-      loaded?.dispose();
-    };
-  }, []);
-
   const blink = useRef({ next: 2.4, until: 0 });
   /** Speech envelope recovered from the text, for when there is no audio yet. */
   const spoken = useRef({ length: 0, level: 0 });
@@ -359,9 +257,22 @@ export function Figure() {
     showing.set(target ? attention.weight : 0).update(dt);
     const show = showing.value;
 
-    uniforms.uTime.value = time;
-    uniforms.uLevel.value = voice.level;
-    uniforms.uPresence.value = here;
+    /*
+     * Presence is now opacity and seam brightness rather than a shader term.
+     * A plated body cannot fade by being drawn more faintly on top of the
+     * room -- it has to actually go translucent, and its lights have to go
+     * out with it.
+     */
+    /*
+     * The seams have to fight a lit white shell now, not a dark room. On the
+     * hologram a value near one was plenty; against ceramic under a key light
+     * the same value simply vanished.
+     */
+    const glow = here * (3.2 + voice.level * 3.4);
+    for (const skin of Object.values(skins)) {
+      skin.opacity = here;
+      setGlow(skin, glow);
+    }
 
     figureReport.presence = here;
     figureReport.showing = show;
@@ -377,7 +288,6 @@ export function Figure() {
     const home = expandedId ? ASIDE : HOME;
     place.set(home[0], home[1], home[2]).update(dt);
     group.current.position.set(place.x.value, place.y.value, place.z.value);
-    uniforms.uFootY.value = place.y.value + RIG.footY * FIGURE_SCALE;
 
     /*
      * Squared up to the viewer, wherever the viewer happens to be.
@@ -544,9 +454,16 @@ export function Figure() {
     jaw.set(clamp01(envelope * 1.2)).update(dt);
     figureReport.mouth = jaw.value;
     if (mouth.current) {
+      /*
+       * The vent opens and brightens together. Scale alone reads as a shutter;
+       * light alone reads as a lamp being turned up. Both at once reads as a
+       * thing speaking.
+       */
       const open = jaw.value;
-      mouth.current.scale.set(1 - open * 0.18, 0.2 + open * 1.5, 1);
-      (mouth.current.material as { opacity: number }).opacity = 0.55 + open * 0.45;
+      mouth.current.scale.set(1 - open * 0.12, 0.35 + open * 1.9, 1);
+    }
+    if (skins.optic.emissiveIntensity !== undefined) {
+      skins.optic.emissiveIntensity = here * (3.4 + jaw.value * 4.5);
     }
 
     // --- Eyes ------------------------------------------------------------
@@ -569,7 +486,6 @@ export function Figure() {
      * WITH -- you cannot draw darkness. Two abstract marks could be scaled to
      * nothing; a painted face cannot, so it simply looks at you.
      */
-    if (faceSkin) faceSkin.uniforms.uOpacity!.value = 0.5 + here * 0.45;
 
     /*
      * The plinth. Turning slowly, and brightening with the voice, so it reads
@@ -627,10 +543,10 @@ export function Figure() {
         rather than as a limb attached to it: the profile swings away from the
         torso and nothing bridges the gap it leaves.
       */}
-      <mesh material={material} geometry={body.joint} />
+      <mesh material={skins.copper} geometry={body.joint} />
       <mesh material={material} geometry={body.upperArm} />
       <group ref={elbow} position={[0, -RIG.upperArm, 0]}>
-        <mesh material={material} geometry={body.tinyJoint} />
+        <mesh material={skins.copper} geometry={body.tinyJoint} />
         <mesh material={material} geometry={body.forearm} />
         <group position={[0, -RIG.forearm, 0]}>
           <mesh material={material} geometry={body.palm} />
@@ -665,14 +581,26 @@ export function Figure() {
         </mesh>
       </group>
 
+      {/*
+        Its own key light.
+        The room is lit almost entirely blue, and a white ceramic shell under a
+        blue key is a grey shell -- which is exactly how the first plated
+        version came out. A presenter gets lit like one: a small warm-neutral
+        source in front and above, close enough to fall off before it reaches
+        anything else in the scene.
+      */}
+      <pointLight position={[0.62, 1.05, 1.15]} intensity={2.1} distance={3.0} decay={2} color="#FFF4E6" />
+      {/* And a cool fill from the other side, so the shadow side is not dead. */}
+      <pointLight position={[-0.85, 0.5, 0.7]} intensity={0.75} distance={2.4} decay={2} color="#BFE4FF" />
+
       <group ref={root}>
         {/* Legs. Static: this figure stands, it never walks. */}
         {([-1, 1] as const).map((side) => (
           <group key={side} position={[side * RIG.hipX, 0, 0]} rotation={[0.04, 0, side * 0.03]}>
-            <mesh material={material} geometry={body.joint} />
+            <mesh material={skins.copper} geometry={body.joint} />
             <mesh material={material} geometry={body.thigh} />
             <group position={[0, -RIG.thigh, 0]} rotation={[-0.06, 0, 0]}>
-              <mesh material={material} geometry={body.smallJoint} />
+              <mesh material={skins.copper} geometry={body.smallJoint} />
               <mesh material={material} geometry={body.shin} />
               <mesh material={material} geometry={body.foot} position={[0, -RIG.shin, 0]} />
             </group>
@@ -680,19 +608,13 @@ export function Figure() {
         ))}
 
         <group ref={chest}>
-          <mesh material={skins.body} geometry={body.torso} />
+          <mesh material={skins.torso} geometry={body.torso} />
 
           {arm(-1, shoulderL, elbowL, openL, curledL)}
           {arm(1, shoulderR, elbowR, openR, curledR)}
 
           <group ref={head} position={[0, RIG.headY, 0]}>
-            <mesh material={face ? skins.headBare : skins.head} geometry={body.head} />
-            {/*
-              Hair. It earns its place: in a silhouette this small it is the
-              single strongest signal that what you are looking at is a person.
-            */}
-            <mesh material={skins.hair} geometry={body.hair} />
-            <mesh material={skins.hair} geometry={body.fringe} />
+            <mesh material={skins.helmet} geometry={body.head} />
 
             {/*
               Face. Two marks and a mouth, sitting proud of the skull so they
@@ -700,58 +622,44 @@ export function Figure() {
               at this scale lands in the uncanny valley, and this figure has no
               business being mistaken for a person.
             */}
-            {face ? (
-              /*
-               * Flat, not wrapped onto the skull. A sphere sector would follow
-               * the curvature, but the head only ever turns about fifty degrees
-               * and a plane foreshortens across that range much the way a face
-               * does. What makes it work is the blending: the generated frame
-               * has a black ground, and black adds nothing, so the corners of
-               * the plane simply are not there.
-               */
-              <mesh material={faceSkin!} position={[0, 0, RIG.faceZ + 0.004]}>
-                <planeGeometry args={[FACE_W, FACE_H]} />
-              </mesh>
-            ) : (
-              /*
-               * The fallback. Pushed further out than the skull and drawn at
-               * full strength: the contour rings cross the head like everything
-               * else, and at this size a face at the same brightness simply
-               * disappears into them.
-               */
-              <group ref={eyes} position={[0, 0.016, RIG.faceZ + 0.006]}>
-                {([-1, 1] as const).map((side) => (
-                  <mesh key={side} position={[side * 0.036, 0, 0]} rotation={[0, side * -0.24, 0]}>
-                    <planeGeometry args={[0.035, 0.016]} />
-                    <meshBasicMaterial
-                      color={PALETTE.signal}
-                      transparent
-                      opacity={0.95}
-                      depthWrite={false}
-                      blending={AdditiveBlending}
-                    />
-                  </mesh>
-                ))}
+            {/*
+              The visor, and the optics sitting in it.
+              A face at this size is two lights and a line -- the references
+              carry a helmet with a dark band and a pair of glowing eyes, and
+              that is exactly as much face as forty pixels can hold. Anything
+              modelled finer becomes noise before it becomes a feature.
+            */}
+            <mesh material={skins.visor} position={[0, 0.015, RIG.faceZ - 0.012]}>
+              <boxGeometry args={[0.126, 0.036, 0.05]} />
+            </mesh>
+            <group ref={eyes} position={[0, 0.017, RIG.faceZ + 0.008]}>
+              {([-1, 1] as const).map((side) => (
+                <mesh key={side} material={skins.optic} position={[side * 0.031, 0, 0]}>
+                  <capsuleGeometry args={[0.0072, 0.019, 2, 8]} />
+                </mesh>
+              ))}
+            </group>
+
+            {/* Temple units. Every reference has them, and they are what stops
+                a smooth helmet reading as an egg. */}
+            {([-1, 1] as const).map((side) => (
+              <group key={side} position={[side * 0.079, 0.005, 0.006]} rotation={[0, 0, side * Math.PI / 2]}>
+                <mesh material={skins.shell}>
+                  <cylinderGeometry args={[0.031, 0.031, 0.016, 16]} />
+                </mesh>
+                <mesh material={skins.optic} position={[0, side * 0.009, 0]}>
+                  <cylinderGeometry args={[0.014, 0.014, 0.003, 14]} />
+                </mesh>
               </group>
-            )}
+            ))}
 
             {/*
-              The mouth rides on top either way, sat over the painted one so the
-              two are the same mouth. It is the only part of a face that has to
-              move, and the one part an image cannot do.
+              The mouth: a vent under the jaw that lights and opens on speech.
+              A machine of this kind has no lips, and the references put the
+              vocal element exactly here -- a lit bar across the lower face.
             */}
-            <mesh
-              ref={mouth}
-              position={[0, face ? FACE_MOUTH_Y : -0.055, RIG.faceZ + (face ? 0.012 : 0)]}
-            >
-              <planeGeometry args={[0.05, 0.03]} />
-              <meshBasicMaterial
-                color={PALETTE.lumen}
-                transparent
-                opacity={0.4}
-                depthWrite={false}
-                blending={AdditiveBlending}
-              />
+            <mesh ref={mouth} material={skins.optic} position={[0, -0.052, RIG.faceZ - 0.008]}>
+              <boxGeometry args={[0.052, 0.016, 0.02]} />
             </mesh>
           </group>
         </group>
