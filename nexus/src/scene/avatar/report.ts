@@ -31,3 +31,30 @@ export const figureReport = {
   /** What it is turned toward: the stage point, or the viewer. */
   looking: 'viewer' as 'viewer' | 'stage',
 };
+
+/**
+ * Bring the figure forward to be looked at.
+ *
+ * Every judgement about this body -- proportions, plating, the helmet, whether
+ * a seam reads at all -- was made by editing two constants, reloading, looking,
+ * and editing them back. That is a slow way to answer "does this look right",
+ * and it leaves the source in a state where forgetting to revert ships a
+ * two-metre robot standing in front of the content.
+ *
+ * So the override lives here instead. `__nexus.inspect()` walks the figure out
+ * to the middle of the room at a size you can actually see; `inspect(0)` puts
+ * it back. Nothing in the shipped path reads this unless it is switched on.
+ */
+export const inspect = {
+  active: false,
+  /*
+   * Far enough back that the whole body fits the frame at this size. Measured
+   * rather than guessed: at 0.68 scale and z 6.6 the figure lands 410 pixels
+   * tall, so twice the size at three quarters the apparent distance comes out
+   * near 900 -- which is the viewport, near enough.
+   */
+  scale: 2.6,
+  x: 0,
+  y: -0.35,
+  z: 5.6,
+};

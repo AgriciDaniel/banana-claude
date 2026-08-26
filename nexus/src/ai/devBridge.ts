@@ -7,7 +7,7 @@ import { useMediaStore } from '@/stores/useMediaStore';
 import { MODULES } from '@/config/modules';
 import { useFeedStore } from '@/modules/store';
 import { deriveFace } from '@/modules/faces';
-import { figureReport } from '@/scene/avatar/report';
+import { figureReport, inspect } from '@/scene/avatar/report';
 import { attention, voice } from '@/stores/runtime';
 import { rehearse, SCENARIOS } from '@/gesture/devScenarios';
 import {
@@ -59,6 +59,9 @@ export interface DevBridge {
   /** Where the figure is standing, what it is turned toward, and how big it
    *  comes out on screen. The only way to tune its placement. */
   figure: () => typeof figureReport & { attention: typeof attention };
+  /** Walk the figure out to the middle of the room to look at it. 0 puts it
+   *  back where it belongs. */
+  inspect: (scale?: number) => string;
   /** What each ring card is currently painting, and on what evidence. */
   cards: () => Array<{
     id: string;
@@ -202,6 +205,16 @@ export function installDevBridge(): () => void {
       return { topic: s.topic, stack: s.stack.map(brief), retiring: s.retiring.map(brief) };
     },
     figure: () => ({ ...figureReport, attention: { ...attention } }),
+    inspect: (scale?: number) => {
+      // No argument means "as configured", not "at some default I picked here".
+      if (scale !== undefined) {
+        inspect.active = scale > 0;
+        if (inspect.active) inspect.scale = scale;
+      } else {
+        inspect.active = true;
+      }
+      return inspect.active ? `inspecting at ${inspect.scale}x` : 'back on its mark';
+    },
     cards: () => {
       const feeds = useFeedStore.getState().feeds;
       return MODULES.map((mod) => {

@@ -30,7 +30,7 @@ import {
   buildMechanism,
   type FingerPlace,
 } from './body';
-import { figureReport } from './report';
+import { figureReport, inspect } from './report';
 
 /**
  * The assistant, with a body.
@@ -310,9 +310,15 @@ export function Figure() {
     }
     group.current.visible = true;
 
-    const home = expandedId ? ASIDE : HOME;
+    /* Dev-only: `__nexus.inspect()` walks it out to be looked at. */
+    const home = inspect.active
+      ? ([inspect.x, inspect.y, inspect.z] as const)
+      : expandedId
+        ? ASIDE
+        : HOME;
     place.set(home[0], home[1], home[2]).update(dt);
     group.current.position.set(place.x.value, place.y.value, place.z.value);
+    group.current.scale.setScalar(inspect.active ? inspect.scale : FIGURE_SCALE);
 
     /*
      * Squared up to the viewer, wherever the viewer happens to be.
