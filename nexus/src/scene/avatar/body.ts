@@ -33,6 +33,25 @@ import {
 /** (radius, y) pairs, bottom first. */
 type Profile = Array<[number, number]>;
 
+/**
+ * The skull.
+ *
+ * Shared, because the helmet is not one object: it is a shell with a face
+ * plate recessed into it, a jaw plate under that and a crown over the back,
+ * and every one of those has to be cut from the same curve or they will not
+ * sit flush against each other.
+ */
+const HEAD_PROFILE: Profile = [
+  [0.013, -0.1],
+  [0.044, -0.085],
+  [0.069, -0.054],
+  [0.081, -0.011],
+  [0.085, 0.026],
+  [0.077, 0.067],
+  [0.048, 0.092],
+  [0.011, 0.104],
+];
+
 const lathe = (profile: Profile, segments: number, phiStart = 0, phiLength = Math.PI * 2) =>
   new LatheGeometry(
     profile.map(([r, y]) => new Vector2(Math.max(0.0005, r), y)),
@@ -122,19 +141,7 @@ export function buildBody(segments: number, rig: {
    * The head, with a jaw. A sphere has no chin, and a chin is most of what
    * makes a head point in a direction.
    */
-  const head = lathe(
-    [
-      [0.013, -0.1],
-      [0.044, -0.085],
-      [0.069, -0.054],
-      [0.081, -0.011],
-      [0.085, 0.026],
-      [0.077, 0.067],
-      [0.048, 0.092],
-      [0.011, 0.104],
-    ],
-    ring,
-  );
+  const head = lathe(HEAD_PROFILE, ring);
 
   /*
    * Hair, and it earns its place: in a silhouette this small, hair is the
@@ -332,6 +339,18 @@ export interface Mechanism {
   discRing: BufferGeometry;
   /** A lit slot, for the light let into a plate. */
   slot: BufferGeometry;
+  /*
+   * The helmet, in pieces. The references carry no face at all: a smooth
+   * cranial shell, a dark plate where a face would be, a jaw under it, a crown
+   * over the back, and a large circular unit at the temple. Building it this
+   * way rather than hanging a picture on the front is the only way the detail
+   * belongs to the head instead of floating in front of it.
+   */
+  facePlate: BufferGeometry;
+  jawPlate: BufferGeometry;
+  crownPlate: BufferGeometry;
+  templeRing: BufferGeometry;
+  templeCore: BufferGeometry;
   /** Finger bones, three to a finger, and the knuckle between them. */
   phalanx: BufferGeometry;
   knuckle: BufferGeometry;
@@ -391,6 +410,23 @@ export function buildMechanism(
     false,
   );
 
+  /*
+   * Recessed, not raised: the face is the one plate that sits BELOW the shell
+   * around it, which is what gives the brow and the cheekbones an edge to
+   * catch light on.
+   */
+  const facePlate = sector(slice(HEAD_PROFILE, -0.088, 0.055), ring, FRONT, 1.62, -0.007);
+  const jawPlate = sector(slice(HEAD_PROFILE, -0.101, -0.042), ring, FRONT, 1.95, 0.004);
+  const crownPlate = sector(
+    slice(HEAD_PROFILE, 0.012, 0.101),
+    ring,
+    FRONT + Math.PI,
+    4.3,
+    0.004,
+  );
+  const templeRing = new TorusGeometry(0.03, 0.0075, 8, ring);
+  const templeCore = new CylinderGeometry(0.024, 0.024, 0.012, ring);
+
   const disc = new CylinderGeometry(0.042, 0.042, 0.02, ring);
   /* The collar the cables gather into, at the base of the skull. */
   const collar = new CylinderGeometry(0.046, 0.052, 0.026, ring);
@@ -402,9 +438,11 @@ export function buildMechanism(
 
   const all = [
     core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
+    facePlate, jawPlate, crownPlate, templeRing, templeCore,
   ];
   return {
     core, chestPlate, backPlate, abBand, cable, disc, collar, discRing, slot, phalanx, knuckle,
+    facePlate, jawPlate, crownPlate, templeRing, templeCore,
     dispose: () => all.forEach((g) => g.dispose()),
   };
 }
