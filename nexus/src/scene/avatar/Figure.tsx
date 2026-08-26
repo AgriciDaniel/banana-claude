@@ -1,19 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   AdditiveBlending,
+  ClampToEdgeWrapping,
   Color,
   DoubleSide,
   MeshBasicMaterial,
   Quaternion,
+  SRGBColorSpace,
   ShaderMaterial,
+  TextureLoader,
+  Vector2,
   Vector3,
   type Group,
   type Mesh,
+  type Texture,
 } from 'three';
-import { FIGURE_FRAG, FIGURE_VERT } from '@/shaders/figure';
+import { FACE_FRAG, FACE_VERT, FIGURE_FRAG, FIGURE_VERT } from '@/shaders/figure';
 import { PALETTE } from '@/config/theme';
 import { attention, interaction, voice } from '@/stores/runtime';
 import { useAssistantStore } from '@/stores/useAssistantStore';
@@ -94,6 +99,28 @@ const ASIDE_PRESENCE = 0.55;
  * booted, and comes up to full when it is spoken to or has something to show.
  */
 const IDLE_PRESENCE = 0.5;
+
+/**
+ * The generated face.
+ *
+ * A face is the one part of a human figure that lathed profiles cannot reach.
+ * They give a skull, a jaw and a silhouette; they do not give eyes, and at the
+ * size this figure stands the whole difference between "a head" and "a face"
+ * is in the eyes. So the face is an image, made once by the same model the
+ * assistant uses for everything else and cached to disk -- see
+ * `npm run make:face`. Absent, the abstract marks stand in and nothing breaks.
+ *
+ * The source frame is landscape with the face centred, so half its width is
+ * cropped away. The horizontal repeat is NEGATIVE to mirror it: the figure
+ * faces +Z and is seen from +Z, which reverses left and right.
+ */
+const FACE_URL = '/avatar/face.png';
+const FACE_CROP = 0.5;
+/** Sized to the skull, hung just clear of its frontmost point. */
+const FACE_W = 0.196;
+const FACE_H = 0.213;
+/** Where the painted mouth falls on that plane, measured off the image. */
+const FACE_MOUTH_Y = -0.068;
 
 /** Below this the stage has nothing worth turning toward. */
 const POINT_THRESHOLD = 0.35;
@@ -197,6 +224,16 @@ export function Figure() {
        * features somewhere to be.
        */
       head: make(130, 1),
+      /*
+       * And the skull with no contours at all, for when a generated face is
+       * hanging on the front of it.
+       *
+       * Everything here is additive, so a ring crossing the face does not cover
+       * it -- it ADDS to it, and the eyes came out with bright bars laid across
+       * them. When there is a real face, the skull's job is to be a silhouette
+       * behind it and nothing more.
+       */
+      headBare: make(0, 0.5),
       /** Hair is not built and does not get the same treatment. */
       hair: make(150, 0.35),
     };
@@ -205,6 +242,7 @@ export function Figure() {
     () => () => {
       skins.body.dispose();
       skins.head.dispose();
+      skins.headBare.dispose();
       skins.hair.dispose();
     },
     [skins],
@@ -254,6 +292,54 @@ export function Figure() {
   /** How committed the pose is to indicating something. */
   const showing = useMemo(() => new Spring(0, SPRINGS.glide), []);
   const jaw = useMemo(() => new Spring(0, SPRINGS.flash), []);
+
+  const [face, setFace] = useState<Texture | null>(null);
+  /*
+   * The face gets its own material rather than a plain textured plane, so the
+   * frame's corners can be masked away. See FACE_FRAG.
+   */
+  const faceSkin = useMemo(() => {
+    if (!face) return null;
+    return new ShaderMaterial({
+      vertexShader: FACE_VERT,
+      fragmentShader: FACE_FRAG,
+      uniforms: {
+        uMap: { value: face },
+        uOffset: { value: new Vector2(0.5 + FACE_CROP / 2, 0) },
+        uRepeat: { value: new Vector2(-FACE_CROP, 1) },
+        uOpacity: { value: 0.9 },
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+    });
+  }, [face]);
+  useEffect(() => () => faceSkin?.dispose(), [faceSkin]);
+  useEffect(() => {
+    let alive = true;
+    let loaded: Texture | null = null;
+    new TextureLoader().load(
+      FACE_URL,
+      (texture) => {
+        if (!alive) {
+          texture.dispose();
+          return;
+        }
+        texture.colorSpace = SRGBColorSpace;
+        texture.wrapS = ClampToEdgeWrapping;
+        loaded = texture;
+        setFace(texture);
+      },
+      undefined,
+      () => {
+        /* No face on disk. The abstract one stands, and that is a fine state. */
+      },
+    );
+    return () => {
+      alive = false;
+      loaded?.dispose();
+    };
+  }, []);
 
   const blink = useRef({ next: 2.4, until: 0 });
   /** Speech envelope recovered from the text, for when there is no audio yet. */
@@ -477,6 +563,13 @@ export function Figure() {
       }
       eyes.current.scale.y = time < b.until ? 0.08 : 1;
     }
+    /*
+     * The generated face does not blink. Blinking means briefly hiding the
+     * eyes, and on an additively blended image there is nothing to hide them
+     * WITH -- you cannot draw darkness. Two abstract marks could be scaled to
+     * nothing; a painted face cannot, so it simply looks at you.
+     */
+    if (faceSkin) faceSkin.uniforms.uOpacity!.value = 0.5 + here * 0.45;
 
     /*
      * The plinth. Turning slowly, and brightening with the voice, so it reads
@@ -593,7 +686,7 @@ export function Figure() {
           {arm(1, shoulderR, elbowR, openR, curledR)}
 
           <group ref={head} position={[0, RIG.headY, 0]}>
-            <mesh material={skins.head} geometry={body.head} />
+            <mesh material={face ? skins.headBare : skins.head} geometry={body.head} />
             {/*
               Hair. It earns its place: in a silhouette this small it is the
               single strongest signal that what you are looking at is a person.
@@ -607,29 +700,51 @@ export function Figure() {
               at this scale lands in the uncanny valley, and this figure has no
               business being mistaken for a person.
             */}
-            {/*
-              Pushed a little further out than the skull and drawn at full
-              strength: the contour rings cross the head like everything else,
-              and at this size a face at the same brightness simply disappears
-              into them.
-            */}
-            <group ref={eyes} position={[0, 0.016, RIG.faceZ + 0.006]}>
-              {([-1, 1] as const).map((side) => (
-                <mesh key={side} position={[side * 0.036, 0, 0]} rotation={[0, side * -0.24, 0]}>
-                  <planeGeometry args={[0.035, 0.016]} />
-                  <meshBasicMaterial
-                    color={PALETTE.signal}
-                    transparent
-                    opacity={0.95}
-                    depthWrite={false}
-                    blending={AdditiveBlending}
-                  />
-                </mesh>
-              ))}
-            </group>
+            {face ? (
+              /*
+               * Flat, not wrapped onto the skull. A sphere sector would follow
+               * the curvature, but the head only ever turns about fifty degrees
+               * and a plane foreshortens across that range much the way a face
+               * does. What makes it work is the blending: the generated frame
+               * has a black ground, and black adds nothing, so the corners of
+               * the plane simply are not there.
+               */
+              <mesh material={faceSkin!} position={[0, 0, RIG.faceZ + 0.004]}>
+                <planeGeometry args={[FACE_W, FACE_H]} />
+              </mesh>
+            ) : (
+              /*
+               * The fallback. Pushed further out than the skull and drawn at
+               * full strength: the contour rings cross the head like everything
+               * else, and at this size a face at the same brightness simply
+               * disappears into them.
+               */
+              <group ref={eyes} position={[0, 0.016, RIG.faceZ + 0.006]}>
+                {([-1, 1] as const).map((side) => (
+                  <mesh key={side} position={[side * 0.036, 0, 0]} rotation={[0, side * -0.24, 0]}>
+                    <planeGeometry args={[0.035, 0.016]} />
+                    <meshBasicMaterial
+                      color={PALETTE.signal}
+                      transparent
+                      opacity={0.95}
+                      depthWrite={false}
+                      blending={AdditiveBlending}
+                    />
+                  </mesh>
+                ))}
+              </group>
+            )}
 
-            <mesh ref={mouth} position={[0, -0.055, RIG.faceZ]}>
-              <planeGeometry args={[0.048, 0.032]} />
+            {/*
+              The mouth rides on top either way, sat over the painted one so the
+              two are the same mouth. It is the only part of a face that has to
+              move, and the one part an image cannot do.
+            */}
+            <mesh
+              ref={mouth}
+              position={[0, face ? FACE_MOUTH_Y : -0.055, RIG.faceZ + (face ? 0.012 : 0)]}
+            >
+              <planeGeometry args={[0.05, 0.03]} />
               <meshBasicMaterial
                 color={PALETTE.lumen}
                 transparent

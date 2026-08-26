@@ -114,3 +114,47 @@ void main() {
   gl_FragColor = vec4(tint * (0.52 + rim * 0.82 + contour * 0.7 + uLevel * 0.2), alpha);
 }
 `;
+
+/**
+ * The face, and the one thing it has to solve.
+ *
+ * A generated frame is a rectangle, and the body is drawn additively, so any
+ * value the model left in the corners of that rectangle adds to the scene --
+ * the first version hung a visible bright square around the face. Nothing in
+ * the image is wrong; a rectangle simply cannot end abruptly on an additive
+ * surface.
+ *
+ * So the edges are taken out here rather than in the file: a soft elliptical
+ * mask over the frame, wider than it is tall because a face is. Doing it in
+ * the shader keeps the generated image untouched and unprocessed, which means
+ * regenerating one is still just `npm run make:face`.
+ */
+
+export const FACE_VERT = /* glsl */ `
+varying vec2 vUv;
+
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+export const FACE_FRAG = /* glsl */ `
+uniform sampler2D uMap;
+uniform vec2 uOffset;
+uniform vec2 uRepeat;
+uniform float uOpacity;
+
+varying vec2 vUv;
+
+void main() {
+  // Crop and mirror, applied here so the mask can stay in frame space.
+  vec3 rgb = texture2D(uMap, vUv * uRepeat + uOffset).rgb;
+
+  vec2 d = (vUv - 0.5) * vec2(2.2, 1.92);
+  float mask = 1.0 - smoothstep(0.66, 1.0, length(d));
+
+  // Additive: the contribution is colour times alpha, so the mask rides there.
+  gl_FragColor = vec4(rgb, mask * uOpacity);
+}
+`;

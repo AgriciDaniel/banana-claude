@@ -2,7 +2,7 @@
   "name": "nexus",
   "version": "1.0.0",
   "private": true,
-  "description": "NEXUS \u2014 a spatial computing operating system for the browser.",
+  "description": "NEXUS — a spatial computing operating system for the browser.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "setup:assets": "node scripts/setup-assets.mjs",
     "postinstall": "node scripts/setup-assets.mjs",
-    "instagram:check": "node scripts/instagram-check.mjs"
+    "instagram:check": "node scripts/instagram-check.mjs",
+    "make:face": "node scripts/make-face.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.21",
