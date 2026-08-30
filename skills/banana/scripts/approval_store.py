@@ -19,6 +19,7 @@ from banana_core import (
     _atomic_write_at,
     _directory_path_matches_fd,
     _open_secure_directory,
+    enforce_json_nesting_limit,
 )
 
 APPROVAL_TTL_MINUTES = 30
@@ -382,6 +383,7 @@ def _load_registry(
             f"Approval registry exceeds the {MAX_REGISTRY_BYTES}-byte safety limit at {path}.",
         )
     try:
+        enforce_json_nesting_limit(raw)
         registry = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise BananaError(

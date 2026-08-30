@@ -16,7 +16,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
-from banana_core import BananaError, SecretSafeArgumentParser, _exclusive_rename_at
+from banana_core import (
+    BananaError,
+    SecretSafeArgumentParser,
+    _exclusive_rename_at,
+    enforce_json_nesting_limit,
+)
 
 SETTINGS_NAME = "settings.json"
 SETTINGS_REVIEWED_RECOVERY_NAME = "settings.reviewed-recovery.json"
@@ -354,6 +359,7 @@ def _read_regular_path(
 
 def _decode_settings(raw: bytes) -> dict[str, Any]:
     try:
+        enforce_json_nesting_limit(raw)
         value: Any = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise CleanupError(
@@ -495,6 +501,7 @@ def _valid_managed_marker(skill_path: Path) -> bool:
             maximum=MAX_MARKER_BYTES,
             code="invalid_managed_marker",
         )
+        enforce_json_nesting_limit(raw)
         value: Any = json.loads(raw.decode("utf-8"))
     except (CleanupError, UnicodeDecodeError, ValueError, RecursionError):
         return False

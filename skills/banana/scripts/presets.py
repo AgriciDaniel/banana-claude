@@ -25,6 +25,7 @@ from banana_core import (
     _directory_path_matches_fd,
     _exclusive_rename_at,
     _open_secure_directory,
+    enforce_json_nesting_limit,
     get_model,
     normalize_image_size,
     validate_approval_text,
@@ -591,6 +592,7 @@ def _read_preset_bytes(path: Path, *, name: str) -> bytes:
 
 def _decode_preset_json(raw: bytes, *, name: str) -> Any:
     try:
+        enforce_json_nesting_limit(raw)
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise BananaError(
@@ -2881,6 +2883,7 @@ def _parse_references(raw_values: list[str]) -> list[dict[str, Any]]:
                 f"Reference {index + 1} exceeds the {MAX_REFERENCE_JSON_CHARS}-character JSON limit.",
             )
         try:
+            enforce_json_nesting_limit(raw)
             parsed = json.loads(raw)
         except (ValueError, RecursionError) as exc:
             raise BananaError(

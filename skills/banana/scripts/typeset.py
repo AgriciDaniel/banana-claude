@@ -20,6 +20,7 @@ from banana_core import (
     SecretSafeArgumentParser,
     _atomic_write,
     _read_regular_file_bounded,
+    enforce_json_nesting_limit,
     image_dimensions,
     validate_approval_text,
     validate_reference_paths,
@@ -603,6 +604,7 @@ def main() -> int:
                     error_code="layers_file_too_large",
                     label="--layers-file",
                 )
+                enforce_json_nesting_limit(layers_raw)
                 layers_value = json.loads(layers_raw.decode("utf-8"))
             except (ValueError, RecursionError) as exc:
                 raise BananaError(

@@ -16,6 +16,7 @@ from typing import Any, BinaryIO
 from banana_core import (
     BananaError,
     build_plan,
+    enforce_json_nesting_limit,
     execute_image,
     issue_public_plan,
     load_catalog,
@@ -943,6 +944,7 @@ class Transport:
                 )
             raw = raw.strip()
         try:
+            enforce_json_nesting_limit(raw)
             message = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError, RecursionError) as exc:
             raise BananaError(

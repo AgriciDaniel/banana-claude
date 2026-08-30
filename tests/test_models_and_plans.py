@@ -13,10 +13,12 @@ from unittest import mock
 from tests._support import PNG_1X1
 
 from banana_core import (
+    MAX_JSON_NESTING_DEPTH,
     BananaError,
     build_generate_content_payload,
     build_interaction_payload,
     build_plan,
+    enforce_json_nesting_limit,
     estimate_image_cost,
     load_catalog,
     public_plan,
@@ -108,6 +110,21 @@ def brief_for_references(
         aspect_ratio=aspect_ratio,
         image_size=image_size,
     )
+
+
+class JsonBoundaryTests(unittest.TestCase):
+    def test_json_nesting_limit_is_explicit_and_interpreter_independent(self) -> None:
+        allowed = b"[" * MAX_JSON_NESTING_DEPTH + b"0" + b"]" * MAX_JSON_NESTING_DEPTH
+        rejected = b"[" + allowed + b"]"
+
+        enforce_json_nesting_limit(allowed)
+        with self.assertRaisesRegex(ValueError, "64-level nesting limit"):
+            enforce_json_nesting_limit(rejected)
+
+    def test_json_nesting_scan_ignores_escaped_string_content(self) -> None:
+        value = b'{"value":"[{\\"nested\\":true}]"}'
+
+        enforce_json_nesting_limit(value, max_depth=1)
 
 
 class CatalogTests(unittest.TestCase):

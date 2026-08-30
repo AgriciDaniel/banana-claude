@@ -27,6 +27,7 @@ from banana_core import (
     _directory_path_matches_fd,
     _exclusive_rename_at,
     _open_secure_directory,
+    enforce_json_nesting_limit,
     estimate_image_cost,
     get_model,
     normalize_image_size,
@@ -770,6 +771,7 @@ def _migration_backup_residue(
 
 def _parse_ledger_bytes(raw: bytes, path: Path) -> Any:
     try:
+        enforce_json_nesting_limit(raw)
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise BananaError(

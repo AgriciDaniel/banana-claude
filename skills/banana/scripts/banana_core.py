@@ -39,6 +39,7 @@ MAX_INLINE_BYTES = 20 * 1024 * 1024
 MAX_PROMPT_CHARS = 65_536
 MAX_PROVIDER_RESPONSE_BYTES = 128 * 1024 * 1024
 MAX_PROVIDER_ERROR_BYTES = 1 * 1024 * 1024
+MAX_JSON_NESTING_DEPTH = 64
 PROVIDER_API_HOST = "generativelanguage.googleapis.com"
 BIDI_CONTROL_CODEPOINTS = frozenset(
     {0x061C, 0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x2066, 0x206A)}
@@ -204,6 +205,47 @@ VIDEO_URL_PAID_ATTEMPT_WARNING = (
     "accessible to Google. Passing the URL asserts those conditions. An "
     "inaccessible URL can consume the one paid provider attempt."
 )
+
+
+def enforce_json_nesting_limit(
+    raw: str | bytes,
+    *,
+    max_depth: int = MAX_JSON_NESTING_DEPTH,
+) -> None:
+    """Reject excessive JSON container depth independently of the parser."""
+    if max_depth < 1:
+        raise ValueError("JSON nesting limit must be positive.")
+    if isinstance(raw, bytes):
+        quote: str | int = 0x22
+        backslash: str | int = 0x5C
+        openings: tuple[str | int, ...] = (0x5B, 0x7B)
+        closings: tuple[str | int, ...] = (0x5D, 0x7D)
+    else:
+        quote = '"'
+        backslash = "\\"
+        openings = ("[", "{")
+        closings = ("]", "}")
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for token in raw:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif token == backslash:
+                escaped = True
+            elif token == quote:
+                in_string = False
+            continue
+        if token == quote:
+            in_string = True
+        elif token in openings:
+            depth += 1
+            if depth > max_depth:
+                raise ValueError(f"JSON exceeds the {max_depth}-level nesting limit.")
+        elif token in closings and depth:
+            depth -= 1
 
 
 class SecretSafeArgumentParser(argparse.ArgumentParser):
@@ -785,8 +827,9 @@ def load_visual_brief_file(path: str | Path) -> dict[str, Any]:
         label="Visual brief",
     )
     try:
+        enforce_json_nesting_limit(raw)
         value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise BananaError(
             "invalid_visual_brief",
             "The visual brief file must contain one valid UTF-8 JSON object.",
@@ -1828,6 +1871,7 @@ def _validated_provider_image_mime(value: Any) -> str:
 
 def _provider_error_status_from_body(body: bytes) -> str | None:
     try:
+        enforce_json_nesting_limit(body)
         parsed = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError):
         return None
@@ -1955,6 +1999,7 @@ def _call_json_api(
                     limit=MAX_PROVIDER_RESPONSE_BYTES,
                     label="response",
                 )
+            enforce_json_nesting_limit(raw)
             parsed = json.loads(raw.decode("utf-8"))
             if not isinstance(parsed, dict):
                 raise BananaError(
@@ -2665,8 +2710,9 @@ def _create_publication_receipt(
 
 def _stale_receipt_directory_identity(raw: bytes) -> tuple[int, int] | None:
     try:
+        enforce_json_nesting_limit(raw)
         parsed = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return None
     if (
         not isinstance(parsed, dict)
