@@ -408,11 +408,34 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertEqual(jpeg_dimensions(social_data), (1280, 640))
         self.assertLess(social.stat().st_size, 1_000_000)
 
+    def test_readme_is_a_concise_front_door(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        guide = (ROOT / "docs/guide.md").read_text(encoding="utf-8")
+
+        self.assertLessEqual(len(readme.split()), 1_000)
+        self.assertEqual(readme.count("```") % 2, 0)
+        self.assertLessEqual(readme.count("```") // 2, 4)
+        self.assertLessEqual(readme.count("\n## "), 10)
+
+        for relative_link in (
+            "docs/guide.md",
+            "SECURITY.md",
+            "CONTRIBUTING.md",
+            "CHANGELOG.md",
+            "skills/banana/references/gemini-models.md",
+        ):
+            self.assertIn(relative_link, readme)
+
+        self.assertIn("## Upgrade from 1.4.1 or 2.1.0", guide)
+        self.assertIn("../SECURITY.md", guide)
+        self.assertIn("../CONTRIBUTING.md", guide)
+
     def test_no_credential_cli_or_key_bearing_request_surface(self) -> None:
         product_paths = [
             ROOT / ".claude-plugin",
             ROOT / ".mcp.json",
             ROOT / "agents",
+            ROOT / "docs",
             ROOT / "skills",
             ROOT / "tools",
             ROOT / "README.md",
@@ -673,6 +696,7 @@ class RepositoryContractTests(unittest.TestCase):
             ROOT / "CLAUDE.md",
             ROOT / "SECURITY.md",
             ROOT / "agents",
+            ROOT / "docs",
             ROOT / "skills/banana",
         ]
         forbidden = {
