@@ -3,67 +3,110 @@ name: Validate Plugin
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
+  offline-tests:
+    name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
-      - name: Check SKILL.md line count
+      - name: Run deterministic offline suite
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Compile runtime scripts
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m compileall -q skills/banana/scripts tools tests
+
+      - name: Validate installer syntax
+        run: bash -n install.sh
+
+  repository-contract:
+    name: Repository contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+
+      - name: Install pinned verification tools
+        run: python3 -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+      - name: Run lint, format, and strict typing gates
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          ruff check --no-cache skills/banana/scripts tools tests
+          ruff format --check --no-cache skills/banana/scripts tools tests
+          mypy --strict --no-incremental skills/banana/scripts tools tests
+
+      - name: Run repository contract tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest -v tests.test_repo_contracts
+
+      - name: Verify the exact source archive
+        shell: bash
+        run: |
+          archive_dir="$(mktemp -d)"
+          git archive HEAD | tar -x -C "${archive_dir}"
+          cd "${archive_dir}"
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v tests.test_repo_contracts
+
+      - name: Check skill size
         shell: bash
         run: |
           lines=$(wc -l < skills/banana/SKILL.md)
-          echo "SKILL.md: ${lines} lines"
           if [ "${lines}" -gt 500 ]; then
             echo "::error::SKILL.md exceeds 500 lines"
             exit 1
           fi
+          echo "SKILL.md: ${lines} lines"
 
-      - name: Verify required files exist
-        shell: bash
-        run: |
-          files=(
-            .claude-plugin/plugin.json
-            skills/banana/SKILL.md
-            skills/banana/references/gemini-models.md
-            skills/banana/references/mcp-tools.md
-            skills/banana/references/post-processing.md
-            skills/banana/references/prompt-engineering.md
-            skills/banana/references/cost-tracking.md
-            skills/banana/references/presets.md
-            skills/banana/scripts/setup_mcp.py
-            skills/banana/scripts/validate_setup.py
-            skills/banana/scripts/generate.py
-            skills/banana/scripts/edit.py
-            skills/banana/scripts/cost_tracker.py
-            skills/banana/scripts/presets.py
-            skills/banana/scripts/batch.py
-            install.sh
-          )
-          for f in "${files[@]}"; do
-            test -f "${f}" && echo "OK: ${f}" || { echo "::error::Missing ${f}"; exit 1; }
-          done
+      - name: Explain local Claude validation gate
+        run: echo "Run 'claude plugin validate --strict .' before release; CI never installs or calls Claude or Gemini."
 
-      - name: Check Python syntax
-        shell: bash
+  validate:
+    name: validate
+    if: ${{ always() }}
+    needs: [offline-tests, repository-contract]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every validation job
+        env:
+          OFFLINE_TESTS_RESULT: ${{ needs.offline-tests.result }}
+          REPOSITORY_CONTRACT_RESULT: ${{ needs.repository-contract.result }}
         run: |
-          for f in skills/banana/scripts/*.py; do
-            python3 -m py_compile "$f" && echo "OK: $f" || { echo "::error::Syntax error in $f"; exit 1; }
-          done
-
-      - name: Check for outdated rate limits
-        shell: bash
-        run: |
-          if grep -rEl "~10 RPM / ~500 RPD" skills/banana/ README.md 2>/dev/null; then
-            echo "::error::Found outdated rate limits (pre-Dec 2025 cut values)"
-            exit 1
-          fi
-          echo "No outdated rate limits found"
+          test "${OFFLINE_TESTS_RESULT}" = "success"
+          test "${REPOSITORY_CONTRACT_RESULT}" = "success"

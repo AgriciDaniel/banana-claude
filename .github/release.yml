@@ -1,5 +1,11 @@
 changelog:
   categories:
+    - title: Security
+      labels:
+        - security
+    - title: Breaking Changes
+      labels:
+        - breaking-change
     - title: New Features
       labels:
         - enhancement

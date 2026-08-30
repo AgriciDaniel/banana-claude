@@ -1,168 +1,172 @@
 #!/usr/bin/env python3
-"""Banana Claude -- Direct API Fallback: Image Generation
+"""Plan or execute one Gemini image generation interaction.
 
-Generate images via Gemini REST API when MCP is unavailable.
-Uses only Python stdlib (no pip dependencies).
-
-Usage:
-    generate.py --prompt "a cat in space" [--aspect-ratio 16:9] [--resolution 1K]
-                [--model MODEL] [--api-key KEY] [--thinking LEVEL] [--image-only]
+Planning is the default and performs no Google request. It issues a short-lived
+single-use approval ID. Execution requires both --execute and that exact ID.
+Credentials are read only from the environment.
 """
 
+from __future__ import annotations
+
 import argparse
-import base64
 import json
-import os
 import sys
-import time
-import urllib.request
-from datetime import datetime
-from pathlib import Path
 
-DEFAULT_MODEL = "gemini-3.1-flash-image-preview"
-DEFAULT_RESOLUTION = "2K"  # Must be uppercase -- lowercase values are silently rejected by the API
-DEFAULT_RATIO = "1:1"
-OUTPUT_DIR = Path.home() / "Documents" / "nanobanana_generated"
-API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
-
-VALID_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2",
-                "4:5", "5:4", "1:4", "4:1", "1:8", "8:1", "21:9"}
-VALID_RESOLUTIONS = {"512", "1K", "2K", "4K"}
+from banana_core import (
+    BananaError,
+    SecretSafeArgumentParser,
+    build_plan,
+    build_reference_specs,
+    execute_image,
+    issue_public_plan,
+    load_visual_brief_file,
+)
 
 
-def generate_image(prompt, model, aspect_ratio, resolution, api_key,
-                   thinking_level=None, image_only=False):
-    """Call Gemini API to generate an image."""
-    url = f"{API_BASE}/{model}:generateContent?key={api_key}"
-
-    modalities = ["IMAGE"] if image_only else ["TEXT", "IMAGE"]
-    body = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseModalities": modalities,
-            "imageConfig": {
-                "aspectRatio": aspect_ratio,
-                "imageSize": resolution,
-            },
-        },
-    }
-
-    if thinking_level:
-        body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": thinking_level}
-
-    data = json.dumps(body).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+def build_parser() -> argparse.ArgumentParser:
+    parser = SecretSafeArgumentParser(
+        description="Plan or execute a Gemini image generation"
     )
-
-    max_retries = 3
-    result = None
-    for attempt in range(max_retries):
-        try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-            break  # Success
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8") if e.fp else ""
-            if e.code == 429 and attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
-                print(json.dumps({"retry": True, "attempt": attempt + 1, "wait_seconds": wait, "reason": "rate_limited"}), file=sys.stderr)
-                time.sleep(wait)
-                # Rebuild request for retry
-                req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
-                continue
-            if e.code == 400 and "FAILED_PRECONDITION" in error_body:
-                print(json.dumps({"error": True, "status": 400, "message": "Billing not enabled. Enable billing at https://aistudio.google.com/apikey"}))
-                sys.exit(1)
-            print(json.dumps({"error": True, "status": e.code, "message": error_body}))
-            sys.exit(1)
-        except urllib.error.URLError as e:
-            print(json.dumps({"error": True, "message": str(e.reason)}))
-            sys.exit(1)
-
-    if result is None:
-        print(json.dumps({"error": True, "message": "Max retries exceeded"}))
-        sys.exit(1)
-
-    # Extract image from response
-    candidates = result.get("candidates", [])
-    if not candidates:
-        finish_reason = result.get("promptFeedback", {}).get("blockReason", "UNKNOWN")
-        print(json.dumps({"error": True, "message": f"No candidates returned. Reason: {finish_reason}"}))
-        sys.exit(1)
-
-    parts = candidates[0].get("content", {}).get("parts", [])
-    image_data = None
-    text_response = ""
-
-    for part in parts:
-        if "inlineData" in part:
-            image_data = part["inlineData"]["data"]
-        elif "text" in part:
-            text_response = part["text"]
-
-    if not image_data:
-        finish_reason = candidates[0].get("finishReason", "UNKNOWN")
-        print(json.dumps({"error": True, "message": f"No image in response. finishReason: {finish_reason}"}))
-        sys.exit(1)
-
-    # Save image
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    filename = f"banana_{timestamp}.png"
-    output_path = (OUTPUT_DIR / filename).resolve()
-
-    with open(output_path, "wb") as f:
-        f.write(base64.b64decode(image_data))
-
-    return {
-        "path": str(output_path),
-        "model": model,
-        "aspect_ratio": aspect_ratio,
-        "resolution": resolution,
-        "text": text_response,
-    }
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Generate images via Gemini REST API")
-    parser.add_argument("--prompt", required=True, help="Image generation prompt")
-    parser.add_argument("--aspect-ratio", default=DEFAULT_RATIO, help=f"Aspect ratio (default: {DEFAULT_RATIO})")
-    parser.add_argument("--resolution", default=DEFAULT_RESOLUTION, help=f"Resolution: 512, 1K, 2K, 4K (default: {DEFAULT_RESOLUTION})")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model ID (default: {DEFAULT_MODEL})")
-    parser.add_argument("--api-key", default=None, help="Google AI API key (or set GOOGLE_AI_API_KEY env)")
-    parser.add_argument("--thinking", default=None, choices=["minimal", "low", "medium", "high"], help="Thinking level")
-    parser.add_argument("--image-only", action="store_true", help="Return image only (no text)")
-
-    args = parser.parse_args()
-
-    if args.aspect_ratio not in VALID_RATIOS:
-        print(json.dumps({"error": True, "message": f"Invalid aspect ratio '{args.aspect_ratio}'. Valid: {sorted(VALID_RATIOS)}"}))
-        sys.exit(1)
-
-    if args.resolution not in VALID_RESOLUTIONS:
-        print(json.dumps({"error": True, "message": f"Invalid resolution '{args.resolution}'. Valid: {sorted(VALID_RESOLUTIONS)}"}))
-        sys.exit(1)
-
-    api_key = args.api_key or os.environ.get("GOOGLE_AI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        print(json.dumps({"error": True, "message": "No API key. Set GOOGLE_AI_API_KEY env or pass --api-key"}))
-        sys.exit(1)
-
-    result = generate_image(
-        prompt=args.prompt,
-        model=args.model,
-        aspect_ratio=args.aspect_ratio,
-        resolution=args.resolution,
-        api_key=api_key,
-        thinking_level=args.thinking,
-        image_only=args.image_only,
+    parser.add_argument("--prompt", required=True)
+    parser.add_argument("--model", default="gemini-3.1-flash-image")
+    parser.add_argument("--aspect-ratio", default="1:1")
+    parser.add_argument("--resolution", default="auto")
+    parser.add_argument(
+        "--reference",
+        action="append",
+        default=[],
+        help="Reference image path, repeatable",
     )
-    print(json.dumps(result, indent=2))
+    parser.add_argument(
+        "--reference-name",
+        action="append",
+        default=[],
+        help="Non-sensitive disclosure alias aligned by reference order",
+    )
+    parser.add_argument(
+        "--reference-role",
+        action="append",
+        choices=["object", "character", "style"],
+        default=[],
+    )
+    parser.add_argument(
+        "--reference-purpose",
+        action="append",
+        default=[],
+        help="Purpose aligned by reference order",
+    )
+    parser.add_argument(
+        "--reference-subject-id",
+        action="append",
+        default=[],
+        help="Subject label aligned by reference order",
+    )
+    parser.add_argument(
+        "--video-url",
+        help=(
+            "HTTPS YouTube watch or short URL syntax, Flash Image only; "
+            "existence, public status, and Google accessibility are user-asserted, "
+            "not preflighted; an inaccessible URL can consume the one paid attempt"
+        ),
+    )
+    parser.add_argument("--previous-interaction-id")
+    parser.add_argument("--thinking", choices=["minimal", "high"])
+    parser.add_argument("--web-search", action="store_true")
+    parser.add_argument("--image-search", action="store_true")
+    parser.add_argument(
+        "--store",
+        action="store_true",
+        help="Allow provider-side storage for continuation",
+    )
+    parser.add_argument("--mime-type", choices=["image/jpeg"], default="image/jpeg")
+    parser.add_argument("--output-dir")
+    parser.add_argument("--brief-file", help="UTF-8 JSON banana.visual-brief.v1 file")
+    parser.add_argument("--label", default="generation")
+    parser.add_argument(
+        "--record-prompt",
+        action="store_true",
+        help="Store raw prompt in the local metadata sidecar",
+    )
+    parser.add_argument(
+        "--execute", action="store_true", help="Make the paid provider request"
+    )
+    parser.add_argument("--confirm", help="Single-use approval ID approved by the user")
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    operation = "continue" if args.previous_interaction_id else "generate"
+    try:
+        references = build_reference_specs(
+            args.reference,
+            names=args.reference_name,
+            roles=args.reference_role,
+            purposes=args.reference_purpose,
+            subject_ids=args.reference_subject_id,
+        )
+        visual_brief = (
+            load_visual_brief_file(args.brief_file) if args.brief_file else None
+        )
+        plan = build_plan(
+            operation=operation,
+            prompt=args.prompt,
+            model=args.model,
+            aspect_ratio=args.aspect_ratio,
+            image_size=args.resolution,
+            reference_paths=references,
+            video_url=args.video_url,
+            previous_interaction_id=args.previous_interaction_id,
+            thinking_level=args.thinking,
+            web_search=args.web_search,
+            image_search=args.image_search,
+            store=args.store,
+            mime_type=args.mime_type,
+            destination=args.output_dir,
+            label=args.label,
+            record_prompt=args.record_prompt,
+            visual_brief=visual_brief,
+        )
+        if not args.execute:
+            print(
+                json.dumps(
+                    {"network_called": False, "plan": issue_public_plan(plan)}, indent=2
+                )
+            )
+            return 0
+        if not args.confirm:
+            raise BananaError(
+                "confirmation_required",
+                "Execution requires --confirm with the single-use approval ID.",
+            )
+
+        result = execute_image(
+            operation=operation,
+            prompt=args.prompt,
+            approval_id=args.confirm,
+            model=args.model,
+            aspect_ratio=args.aspect_ratio,
+            image_size=args.resolution,
+            reference_paths=references,
+            video_url=args.video_url,
+            previous_interaction_id=args.previous_interaction_id,
+            thinking_level=args.thinking,
+            web_search=args.web_search,
+            image_search=args.image_search,
+            store=args.store,
+            mime_type=args.mime_type,
+            destination=args.output_dir,
+            label=args.label,
+            record_prompt=args.record_prompt,
+            visual_brief=visual_brief,
+        )
+        result.pop("image_contents", None)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0
+    except BananaError as exc:
+        print(json.dumps(exc.as_dict()), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

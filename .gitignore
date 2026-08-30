@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 *.pyo
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 .venv/
 venv/
 
@@ -18,13 +21,20 @@ Thumbs.db
 
 # Secrets
 .env
+.env.*
 *.key
+
+# Local Banana state
+.banana/
+
+# Local Claude permissions and settings
+.claude/settings.local.json
 
 # Packages
 *.skill
 *.tar.gz
 
-# Build scripts (root-level only, not nano-banana/scripts/)
+# Root-level build scripts
 /scripts/
 
 # Firebase
