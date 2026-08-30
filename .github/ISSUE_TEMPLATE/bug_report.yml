@@ -1,10 +1,13 @@
 name: Bug Report
 description: Report a bug or unexpected behavior
+title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: Thanks for reporting a bug! Please fill out the details below.
+      value: >-
+        Thanks for reporting a bug. Never include API keys, key-bearing URLs,
+        credential files, full environment dumps, or unredacted private media.
   - type: textarea
     id: description
     attributes:
@@ -25,8 +28,21 @@ body:
       label: Steps to reproduce
       description: How can we reproduce this?
       placeholder: |
-        1. Run `/banana generate "..."`
-        2. See error...
+        1. In the plugin, run `/banana-claude:banana generate "..."`
+        2. In a standalone install, run `/banana generate "..."`
+        3. See error...
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install path
+      description: How are you running Banana Claude?
+      options:
+        - Claude Code plugin
+        - Standalone /banana skill
+        - Direct Python script
+        - Local plugin development checkout
     validations:
       required: true
   - type: input
@@ -34,10 +50,25 @@ body:
     attributes:
       label: Gemini model
       description: Which model were you using?
-      placeholder: "gemini-3.1-flash-image-preview"
+      placeholder: "gemini-3.1-flash-image"
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Banana Claude, Claude Code, operating system, and Python versions
+      placeholder: "Banana Claude 3.0.0, Claude Code 2.x, Linux, Python 3.14"
   - type: textarea
     id: logs
     attributes:
       label: Error output
-      description: Paste any error messages or logs
+      description: Paste only the smallest redacted error needed to reproduce the bug
       render: shell
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed API keys, key-bearing URLs, private media, local usernames, and unrelated environment data.
+          required: true
+        - label: I searched existing issues and discussions for the same problem.
+          required: true

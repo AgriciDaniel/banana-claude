@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "banana": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/skills/banana/scripts/mcp_server.py"
+      ],
+      "env": {
+        "GEMINI_API_KEY": "${user_config.google_ai_api_key}",
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

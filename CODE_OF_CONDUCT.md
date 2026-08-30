@@ -29,8 +29,11 @@ Examples of unacceptable behavior:
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by [opening an issue](https://github.com/AgriciDaniel/banana-claude/issues) on this repository.
+Instances of abusive, harassing, or otherwise unacceptable behavior should be
+reported through a private contact published by the project maintainers. Do not
+put personal or safety-sensitive details in a public issue. If no private
+contact is published, ask a maintainer to configure one before sharing details.
+Use GitHub's own reporting tools for immediate platform-safety concerns.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

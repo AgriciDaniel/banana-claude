@@ -2,16 +2,16 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: "Banana Claude"
-abstract: "AI image generation skill for Claude Code -- Creative Director powered by Gemini"
+abstract: "Brief-led Gemini image generation, editing, review, and bounded multi-model orchestration for Claude Code"
 authors:
   - family-names: "Daniel"
     given-names: "Agrici"
     alias: "AgriciDaniel"
 repository-code: "https://github.com/AgriciDaniel/banana-claude"
-url: "https://www.skool.com/ai-marketing-hub-pro"
+url: "https://github.com/AgriciDaniel/banana-claude"
 license: MIT
-version: "1.4.1"
-date-released: "2026-03-27"
+version: "3.0.0"
+date-released: "2026-08-30"
 keywords:
   - ai-image-generation
   - claude-code

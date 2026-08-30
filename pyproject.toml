@@ -1,0 +1,25 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.isort]
+# tests._support inserts the bundled script directory before tests import the
+# executable modules by their plugin-runtime names.
+section-order = [
+  "future",
+  "standard-library",
+  "test-bootstrap",
+  "third-party",
+  "first-party",
+  "local-folder",
+]
+
+[tool.ruff.lint.isort.sections]
+test-bootstrap = ["tests._support"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

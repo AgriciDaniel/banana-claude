@@ -2,5 +2,10 @@
 * @AgriciDaniel
 
 # Skill core
-/banana/SKILL.md @AgriciDaniel
-/banana/references/ @AgriciDaniel
+/skills/banana/SKILL.md @AgriciDaniel
+/skills/banana/references/ @AgriciDaniel
+/skills/banana/scripts/ @AgriciDaniel
+/.claude-plugin/ @AgriciDaniel
+/.mcp.json @AgriciDaniel
+/agents/ @AgriciDaniel
+/tests/ @AgriciDaniel

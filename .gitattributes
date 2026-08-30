@@ -2,6 +2,8 @@
 *.md linguist-documentation
 *.json linguist-data
 screenshots/* linguist-generated
+*.gif binary
 *.jpeg binary
 *.jpg binary
 *.png binary
+*.webp binary

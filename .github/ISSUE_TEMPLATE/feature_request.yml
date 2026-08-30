@@ -1,10 +1,14 @@
 name: Feature Request
 description: Suggest a new feature or improvement
+title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
-      value: We'd love to hear your ideas!
+      value: >-
+        Thanks for the idea. Give us enough context to understand the user,
+        desired outcome, and why the current workflow is insufficient. Never
+        include API keys, key-bearing URLs, or unredacted private media.
   - type: textarea
     id: problem
     attributes:
@@ -19,14 +23,33 @@ body:
       description: How would you like this to work?
     validations:
       required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: What would success look like?
+      description: Give one concrete example or acceptance test for the feature.
+      placeholder: "Given ..., when ..., then ..."
+    validations:
+      required: true
   - type: dropdown
     id: area
     attributes:
       label: Area
       options:
         - Prompt engineering
-        - New domain mode
+        - New operation or capability route
         - Post-processing
         - MCP tools
         - Documentation
         - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Submission check
+      options:
+        - label: I searched existing issues and discussions for the same request.
+          required: true
+        - label: I included a concrete use case and success condition, with sensitive data removed.
+          required: true
