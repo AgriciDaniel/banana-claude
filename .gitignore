@@ -40,3 +40,18 @@ Thumbs.db
 # Firebase
 firebase-debug.log
 cover-options/
+
+# Local verification artefacts (browser screenshots, MCP session logs)
+.playwright-mcp/
+media-*.png
+chart-*.png
+slide-*.png
+insta-*.png
+croix-*.png
+paire-*.png
+heatmap*.png
+scatter*.png
+rangee-*.png
+radar*.png
+fiche-*.png
+photo-*.png

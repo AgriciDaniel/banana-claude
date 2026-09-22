@@ -1,0 +1,41 @@
+{
+  "projects": [
+    {
+      "id": "nexus",
+      "name": "NEXUS",
+      "tagline": "A spatial operating system for the browser",
+      "description": "Ten holographic modules orbiting the viewer in a volumetric room with no walls. Hand tracking as the primary input, a streaming Gemini assistant that drives the interface through the same API your hands do, and replies that assemble from particles in mid-air. Built in three phases: environment, assistant, real data.",
+      "status": "active",
+      "tags": ["three.js", "react-three-fiber", "mediapipe", "gemini", "webaudio", "next.js"],
+      "assets": [],
+      "prompts": [
+        {
+          "at": "Phase 1",
+          "text": "Build a production-quality futuristic spatial computing web application called NEXUS. Not a dashboard. Not a website. It should feel like an operating system.",
+          "model": "claude-opus-5"
+        },
+        {
+          "at": "Phase 2",
+          "text": "Turn NEXUS into an AI assistant. Use Gemini API. All communication must stream. Wake phrase Nexus or circle gesture. Support interruption.",
+          "model": "claude-opus-5"
+        },
+        {
+          "at": "Phase 3",
+          "text": "Every module becomes real. No placeholders.",
+          "model": "claude-opus-5"
+        }
+      ]
+    },
+    {
+      "id": "banana-claude",
+      "name": "banana-claude",
+      "tagline": "Claude Code plugin for Gemini image generation",
+      "description": "A Claude Code plugin that turns Claude into a creative director for Google's Nano Banana image models. Interprets intent, selects domain expertise, constructs optimised prompts and orchestrates the API. Ships as a marketplace plugin with zero pip dependencies.",
+      "status": "shipped",
+      "tags": ["claude-code", "plugin", "gemini", "python"],
+      "repo": "AgriciDaniel/banana-claude",
+      "assets": [],
+      "prompts": []
+    }
+  ]
+}
