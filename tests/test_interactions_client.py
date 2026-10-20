@@ -597,7 +597,7 @@ class ResponseTests(unittest.TestCase):
                         }
                     ]
                 },
-                model="gemini-2.5-flash-image",
+                model="gemini-3.1-flash-lite-image",
             )
         self.assertEqual(caught.exception.code, "generation_blocked")
         self.assertEqual(
@@ -2662,36 +2662,39 @@ class ResponseTests(unittest.TestCase):
         self.assertIn("generationConfig", captured["body"])
         self.assertEqual(result["plan"]["api_surface"], "generate_content")
 
-    def test_deprecated_2_5_execution_routes_to_generate_content(self) -> None:
+    def test_lite_execution_routes_to_generate_content_with_image_size(self) -> None:
         captured: dict[str, Any] = {}
 
         def opener(request: Any, **_kwargs: Any) -> FakeResponse:
             captured["url"] = request.full_url
             captured["body"] = json.loads(request.data.decode("utf-8"))
             response = generate_content_response()
-            response["modelVersion"] = "gemini-2.5-flash-image"
+            response["modelVersion"] = "gemini-3.1-flash-lite-image"
             return FakeResponse(response)
 
         with tempfile.TemporaryDirectory() as directory, temporary_banana_home():
             plan = build_plan(
                 operation="generate",
-                prompt="compatibility draft",
-                model="gemini-2.5-flash-image",
+                prompt="lite draft",
+                model="gemini-3.1-flash-lite-image",
                 destination=directory,
             )
             approval = issue_approval(plan["request_fingerprint"], kind="single")
             result = execute_image(
                 operation="generate",
-                prompt="compatibility draft",
-                model="gemini-2.5-flash-image",
+                prompt="lite draft",
+                model="gemini-3.1-flash-lite-image",
                 approval_id=approval["approval_id"],
                 destination=directory,
                 api_key=AUTH_VALUE,
                 opener=opener,
             )
-        self.assertIn("gemini-2.5-flash-image:generateContent", captured["url"])
-        self.assertNotIn(
-            "imageSize", captured["body"]["generationConfig"]["responseFormat"]["image"]
+        self.assertIn("gemini-3.1-flash-lite-image:generateContent", captured["url"])
+        self.assertEqual(
+            captured["body"]["generationConfig"]["responseFormat"]["image"][
+                "imageSize"
+            ],
+            "IMAGE_SIZE_ONE_K",
         )
         self.assertEqual(result["plan"]["api_surface"], "generate_content")
 

@@ -4,12 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
+| 3.1.x   | Yes       |
 | 3.0.x   | Yes       |
 | < 3.0   | No        |
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Banana Claude, please report it responsibly.
+If you discover a security vulnerability in Banana Claude, please report it
+responsibly.
 
 **Do NOT open a public issue for security vulnerabilities.**
 
@@ -100,13 +102,13 @@ when an answer cannot be collected. Direct standalone scripts do not inherit
 that host boundary. Do not publish a live approval ID in an issue or log.
 
 Output MIME selection and the resolved provider response-format object are
-approval-bound. A redacted local Interactions probe using
-`gemini-3-pro-image` was reported on 2026-08-28 as rejecting PNG; it did not
-directly test `gemini-3.1-flash-image`. The current Interactions reference lists
-only JPEG, and the generateContent `ImageResponseFormat` enum exposes only
-`IMAGE_JPEG`. No durable probe-response digest is packaged.
-Every PNG output plan therefore fails locally before the key is read or any
-network call is made. PNG remains valid for checked input references and local
+approval-bound. A redacted local Interactions probe using `gemini-3-pro-image`
+was reported on 2026-08-28 as rejecting PNG; it did not directly test
+`gemini-3.1-flash-image` or `gemini-nano-banana-2.1`. The current Interactions
+reference lists only JPEG, and the generateContent `ImageResponseFormat` enum
+exposes only `IMAGE_JPEG`. No durable probe-response digest is packaged. Every
+PNG output plan therefore fails locally before the key is read or any network
+call is made. PNG remains valid for checked input references and local
 post-processing.
 
 The public approval plan exposes the exact compiled prompt and normalized brief

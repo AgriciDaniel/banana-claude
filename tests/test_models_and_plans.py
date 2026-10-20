@@ -21,6 +21,7 @@ from banana_core import (
     enforce_json_nesting_limit,
     estimate_image_cost,
     load_catalog,
+    models_supporting_image_size,
     public_plan,
 )
 
@@ -130,27 +131,34 @@ class JsonBoundaryTests(unittest.TestCase):
 class CatalogTests(unittest.TestCase):
     def test_catalog_has_current_routes_and_verification_date(self) -> None:
         catalog = load_catalog()
-        self.assertEqual(catalog["verified_on"], "2026-08-29")
-        self.assertEqual(catalog["default_model"], "gemini-3.1-flash-image")
+        self.assertEqual(catalog["verified_on"], "2026-10-20")
+        self.assertEqual(catalog["default_model"], "gemini-nano-banana-2.1")
         self.assertEqual(
             set(catalog["models"]),
             {
                 "gemini-3.1-flash-lite-image",
-                "gemini-3.1-flash-image",
+                "gemini-nano-banana-2.1",
                 "gemini-3-pro-image",
-                "gemini-2.5-flash-image",
+                "gemini-3.1-flash-image",
             },
         )
         self.assertEqual(
-            catalog["models"]["gemini-2.5-flash-image"]["status"], "deprecated"
+            catalog["models"]["gemini-3.1-flash-image"]["status"], "deprecated"
         )
+        self.assertFalse(
+            catalog["models"]["gemini-3.1-flash-image"]["shutdown_date_announced"]
+        )
+        self.assertIn("gemini-2.5-flash-image", catalog["retired_model_ids"])
         self.assertEqual(
             catalog["models"]["gemini-3.1-flash-lite-image"]["api_surface"],
             "generate_content",
         )
         self.assertEqual(
-            catalog["models"]["gemini-2.5-flash-image"]["api_surface"],
-            "generate_content",
+            catalog["models"]["gemini-nano-banana-2.1"]["api_surface"], "interactions"
+        )
+        self.assertEqual(
+            catalog["models"]["gemini-nano-banana-2.1"]["image_sizes"],
+            ["1K", "2K", "4K"],
         )
         self.assertEqual(
             catalog["models"]["gemini-3.1-flash-image"]["api_surface"], "interactions"
@@ -180,20 +188,44 @@ class CatalogTests(unittest.TestCase):
             catalog["models"]["gemini-3.1-flash-lite-image"]["features"][
                 "video_input_policy"
             ],
-            "documentation_conflict_rejected",
+            "client_path_not_validated",
         )
         lite_video_docs = catalog["models"]["gemini-3.1-flash-lite-image"]["features"][
             "video_input_documentation"
         ]
-        self.assertTrue(lite_video_docs["provider_documentation_conflict"])
-        self.assertEqual(
-            lite_video_docs["legacy_generate_content_guide"], "flash_and_lite"
+        self.assertFalse(lite_video_docs["provider_documentation_conflict"])
+        self.assertIn("rejects Lite video", lite_video_docs["note"])
+        self.assertIn("Nano Banana 2.1", lite_video_docs["note"])
+        default_features = catalog["models"]["gemini-nano-banana-2.1"]["features"]
+        self.assertTrue(default_features["video_input"])
+        self.assertTrue(default_features["provider_video_input_documented"])
+        self.assertEqual(default_features["video_input_policy"], "enabled")
+        self.assertNotIn("video_input_documentation", default_features)
+        self.assertNotIn(
+            "pricing_documentation", catalog["models"]["gemini-nano-banana-2.1"]
         )
-        self.assertEqual(lite_video_docs["modern_image_guide"], "flash_only")
-        self.assertEqual(lite_video_docs["current_lite_model_page"], "flash_only")
-        self.assertEqual(lite_video_docs["may_28_changelog"], "flash_only")
-        self.assertIn("Banana rejects Lite video", lite_video_docs["note"])
-        self.assertIn("provider documentation conflict", lite_video_docs["note"])
+        self.assertIn(
+            "nano-banana-2-1-video-input",
+            catalog["models"]["gemini-nano-banana-2.1"]["evidence_claim_ids"][
+                "features"
+            ],
+        )
+        flash = catalog["models"]["gemini-3.1-flash-image"]
+        self.assertTrue(flash["features"]["video_input"])
+        self.assertEqual(flash["features"]["video_input_policy"], "enabled")
+        self.assertIn("only for 512 output", flash["route"])
+        self.assertNotIn("video", flash["route"])
+        self.assertFalse(
+            catalog["models"]["gemini-3-pro-image"]["features"]["video_input"]
+        )
+        self.assertEqual(
+            [
+                model_id
+                for model_id, model_info in catalog["models"].items()
+                if model_info["features"]["video_input"]
+            ],
+            ["gemini-nano-banana-2.1", "gemini-3.1-flash-image"],
+        )
         self.assertTrue(
             {
                 "https://ai.google.dev/gemini-api/docs/image-generation",
@@ -242,10 +274,9 @@ class CatalogTests(unittest.TestCase):
         self.assertTrue(lite["aspect_ratio_policy"]["provider_documentation_conflict"])
         self.assertEqual(len(lite["aspect_ratios"]), 10)
 
-        compatibility = catalog["models"]["gemini-2.5-flash-image"]["reference_limits"]
-        self.assertIsNone(compatibility["provider_hard_total"])
-        self.assertEqual(compatibility["banana_policy_total"], 3)
-        self.assertIn("works best", compatibility["provider_guidance"])
+        default = catalog["models"]["gemini-nano-banana-2.1"]["reference_limits"]
+        self.assertEqual(default["provider_hard_total"], 14)
+        self.assertEqual(default["banana_policy_by_role"]["styles"], 0)
 
     def test_runtime_provider_fields_have_claim_ledger_coverage(self) -> None:
         catalog = load_catalog()
@@ -555,7 +586,34 @@ class PlanTests(unittest.TestCase):
         self.assertIn("provider_storage_retention_options_days", summary)
         self.assertIn("provider_storage_setting_inspectable", summary)
         self.assertIn("provider_storage_warning", summary)
+        self.assertEqual(summary["model"], "gemini-nano-banana-2.1")
+        self.assertEqual(summary["model_status"], "ga")
+        self.assertIsNone(summary["thinking_level"])
+        self.assertEqual(summary["thinking_behavior"], plan["thinking_behavior"])
+        self.assertEqual(summary["thinking_behavior"], "medium")
+        self.assertEqual(
+            summary["image_output_rate_usd"], plan["image_output_rate_usd"]
+        )
+        self.assertIsNone(summary["video_url"])
+        self.assertIsNone(summary["video_url_paid_attempt_warning"])
         self.assertNotIn("visual_brief", disclosed)
+
+        deprecated = public_plan(
+            build_plan(
+                operation="generate",
+                prompt="Simple still life",
+                model="gemini-3.1-flash-image",
+                image_size="512",
+                thinking_level="high",
+            )
+        )["approval_summary"]
+        self.assertEqual(deprecated["model_status"], "deprecated")
+        self.assertEqual(deprecated["thinking_level"], "high")
+        self.assertEqual(deprecated["thinking_behavior"], "client_override_high")
+        self.assertEqual(
+            deprecated["image_output_rate_usd"],
+            estimate_image_cost("gemini-3.1-flash-image", "512"),
+        )
 
     def test_machine_detectable_high_risk_routes_require_structured_brief(self) -> None:
         cases: list[tuple[dict[str, Any], list[str]]] = [
@@ -575,6 +633,7 @@ class PlanTests(unittest.TestCase):
                 {
                     "operation": "generate",
                     "prompt": "video poster",
+                    "model": "gemini-3.1-flash-image",
                     "video_url": "https://youtu.be/dQw4w9WgXcQ",
                 },
                 ["video_input"],
@@ -752,8 +811,8 @@ class PlanTests(unittest.TestCase):
         self.assertNotEqual(
             first["request_fingerprint"], changed["request_fingerprint"]
         )
-        self.assertEqual(first["estimated_image_output_usd"], 0.067)
-        self.assertEqual(first["image_output_rate_usd"], 0.067)
+        self.assertEqual(first["estimated_image_output_usd"], 0.0336)
+        self.assertEqual(first["image_output_rate_usd"], 0.0336)
         self.assertEqual(first["estimate_basis"], "nominal_one_output")
         self.assertFalse(first["estimate_is_invoice_cap"])
         self.assertTrue(first["output_count_uncertain"])
@@ -771,7 +830,7 @@ class PlanTests(unittest.TestCase):
             repriced = build_plan(
                 operation="generate", prompt="A restrained ceramic still life"
             )
-        self.assertEqual(first["catalog_verified_on"], "2026-08-29")
+        self.assertEqual(first["catalog_verified_on"], "2026-10-20")
         self.assertNotEqual(
             first["request_fingerprint"], repriced["request_fingerprint"]
         )
@@ -956,9 +1015,29 @@ class PlanTests(unittest.TestCase):
         self.assertIn("model page", lite["thinking_documentation_note"])
         self.assertEqual(
             build_plan(operation="generate", prompt="reason")["thinking_behavior"],
-            "minimal",
+            "medium",
         )
-        for model in ("gemini-3.1-flash-lite-image", "gemini-3.1-flash-image"):
+        self.assertEqual(
+            build_plan(operation="generate", prompt="reason", thinking_level="medium")[
+                "thinking_behavior"
+            ],
+            "client_override_medium",
+        )
+        self.assert_code(
+            "thinking_not_supported",
+            partial(
+                build_plan,
+                operation="generate",
+                prompt="reason",
+                model="gemini-3.1-flash-image",
+                thinking_level="medium",
+            ),
+        )
+        for model in (
+            "gemini-3.1-flash-lite-image",
+            "gemini-3.1-flash-image",
+            "gemini-nano-banana-2.1",
+        ):
             plan = build_plan(
                 operation="generate",
                 prompt="reason",
@@ -1121,16 +1200,14 @@ class PlanTests(unittest.TestCase):
                 lambda: build_plan(
                     operation="edit",
                     prompt="change only color",
-                    model="gemini-2.5-flash-image",
-                    reference_paths=[provider_reference(image)] * 4,
+                    reference_paths=[provider_reference(image)] * 15,
                 ),
             )
             with self.assertRaises(BananaError) as caught:
                 build_plan(
                     operation="edit",
                     prompt="change only color",
-                    model="gemini-2.5-flash-image",
-                    reference_paths=[provider_reference(image)] * 4,
+                    reference_paths=[provider_reference(image)] * 15,
                 )
             self.assertIn("Banana policy", caught.exception.message)
             self.assert_code(
@@ -1215,12 +1292,58 @@ class PlanTests(unittest.TestCase):
             self.assertIn("subject_id: hero", payload["input"][1]["text"])
             self.assertNotIn("category:", payload["input"][1]["text"])
 
-    def test_video_is_flash_only_and_discloses_syntax_only_validation(self) -> None:
+    def test_video_routes_to_2_1_and_flash_with_syntax_only_validation(
+        self,
+    ) -> None:
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        for video_model in ("gemini-nano-banana-2.1", "gemini-3.1-flash-image"):
+            with (
+                self.subTest(video_model=video_model),
+                mock.patch("banana_core.urllib.request.urlopen") as urlopen,
+            ):
+                self.assert_code(
+                    "structured_brief_required",
+                    partial(
+                        build_plan,
+                        operation="generate",
+                        prompt="poster",
+                        model=video_model,
+                        video_url=url,
+                    ),
+                )
+                plan = build_plan(
+                    operation="generate",
+                    prompt="poster",
+                    model=video_model,
+                    video_url=url,
+                    visual_brief=supplied_visual_brief(),
+                )
+                urlopen.assert_not_called()
+                self.assertEqual(plan["model"], video_model)
+                self.assertEqual(plan["api_surface"], "interactions")
+                self.assertEqual(plan["video_url"], url)
+                self.assertTrue(plan["video_input"])
+                self.assertEqual(plan["structured_brief_reasons"], ["video_input"])
+                payload = build_interaction_payload("poster", plan)
+                self.assertEqual(payload["model"], video_model)
+                self.assertEqual(
+                    payload["input"][0],
+                    {"type": "video", "uri": url, "mime_type": "video/mp4"},
+                )
+                self.assertEqual(
+                    payload["input"][1], {"type": "text", "text": "poster"}
+                )
+                summary = public_plan(plan)["approval_summary"]
+                self.assertEqual(summary["video_url"], url)
+                self.assertEqual(
+                    summary["video_url_paid_attempt_warning"],
+                    plan["video_url_paid_attempt_warning"],
+                )
         with mock.patch("banana_core.urllib.request.urlopen") as urlopen:
             plan = build_plan(
                 operation="generate",
                 prompt="poster",
+                model="gemini-3.1-flash-image",
                 video_url=url,
                 visual_brief=supplied_visual_brief(),
             )
@@ -1255,24 +1378,33 @@ class PlanTests(unittest.TestCase):
             build_plan(
                 operation="generate",
                 prompt="poster",
+                model="gemini-3.1-flash-image",
                 video_url=short_url,
                 visual_brief=supplied_visual_brief(),
             )["video_url"],
             short_url,
         )
-        self.assert_code(
-            "video_not_supported",
-            lambda: build_plan(
-                operation="generate",
-                prompt="poster",
-                model="gemini-3.1-flash-lite-image",
-                video_url=url,
-            ),
-        )
+        for unsupported_model in (
+            "gemini-3.1-flash-lite-image",
+            "gemini-3-pro-image",
+        ):
+            with self.subTest(unsupported_model=unsupported_model):
+                self.assert_code(
+                    "video_not_supported",
+                    partial(
+                        build_plan,
+                        operation="generate",
+                        prompt="poster",
+                        model=unsupported_model,
+                        video_url=url,
+                        visual_brief=supplied_visual_brief(),
+                    ),
+                )
         with self.assertRaises(BananaError) as unsupported:
             build_plan(
                 operation="generate",
                 prompt="poster",
+                model="gemini-3.1-flash-image",
                 video_url="https://example.com/video.mp4",
             )
         self.assertEqual(unsupported.exception.code, "unsupported_video_url")
@@ -1284,6 +1416,7 @@ class PlanTests(unittest.TestCase):
             lambda: build_plan(
                 operation="generate",
                 prompt="poster",
+                model="gemini-3.1-flash-image",
                 video_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ&note=\u202ehidden",
             ),
         )
@@ -1301,6 +1434,7 @@ class PlanTests(unittest.TestCase):
                         build_plan,
                         operation="generate",
                         prompt="poster",
+                        model="gemini-3.1-flash-image",
                         video_url=invalid_url,
                     ),
                 )
@@ -1400,22 +1534,57 @@ class PlanTests(unittest.TestCase):
                     )
                     self.assertEqual(image_format["mimeType"], "IMAGE_JPEG")
 
-    def test_deprecated_2_5_uses_generate_content_without_image_size(self) -> None:
-        plan = build_plan(
-            operation="generate",
-            prompt="compatibility image",
-            model="gemini-2.5-flash-image",
-            aspect_ratio="16:9",
+    def test_retired_2_5_and_default_512_are_rejected_before_network(self) -> None:
+        with self.assertRaises(BananaError) as retired:
+            build_plan(
+                operation="generate",
+                prompt="compatibility image",
+                model="gemini-2.5-flash-image",
+            )
+        self.assertEqual(retired.exception.code, "retired_model")
+        self.assertIn("gemini-2.5-flash-image", retired.exception.message)
+        self.assertIn("was retired", retired.exception.message)
+        self.assertIn(
+            "current default, gemini-nano-banana-2.1", retired.exception.message
         )
-        self.assertEqual(plan["api_surface"], "generate_content")
+        with self.assertRaises(BananaError) as unknown:
+            build_plan(
+                operation="generate",
+                prompt="compatibility image",
+                model="gemini-unknown-image",
+            )
+        self.assertEqual(unknown.exception.code, "unsupported_model")
+        with self.assertRaises(BananaError) as size:
+            build_plan(operation="generate", prompt="draft", image_size="512")
+        self.assertEqual(size.exception.code, "unsupported_image_size")
+        self.assertIn("Use: 1K, 2K, 4K", size.exception.message)
+        self.assertIn(
+            "Catalog models that support 512: gemini-3.1-flash-image",
+            size.exception.message,
+        )
+        with self.assertRaises(BananaError) as alias_size:
+            build_plan(operation="generate", prompt="draft", image_size="512px")
+        self.assertIn(
+            "Catalog models that support 512: gemini-3.1-flash-image",
+            alias_size.exception.message,
+        )
+        with self.assertRaises(BananaError) as unknown_size:
+            build_plan(operation="generate", prompt="draft", image_size="8K")
+        self.assertEqual(unknown_size.exception.code, "unsupported_image_size")
+        self.assertNotIn("Catalog models that support", unknown_size.exception.message)
         self.assertEqual(
-            plan["api_endpoint"],
-            "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-image:generateContent",
+            models_supporting_image_size("2k"),
+            ["gemini-nano-banana-2.1", "gemini-3-pro-image", "gemini-3.1-flash-image"],
         )
-        payload = build_generate_content_payload("compatibility image", plan)
-        image_config = payload["generationConfig"]["responseFormat"]["image"]
-        self.assertEqual(image_config["aspectRatio"], "ASPECT_RATIO_SIXTEEN_BY_NINE")
-        self.assertNotIn("imageSize", image_config)
+        self.assertEqual(
+            build_plan(
+                operation="generate",
+                prompt="draft",
+                model="gemini-3.1-flash-image",
+                image_size="512",
+            )["image_size"],
+            "512",
+        )
 
     def test_single_interaction_does_not_fake_a_sample_count(self) -> None:
         self.assert_code(

@@ -56,7 +56,7 @@ body:
     attributes:
       label: Versions
       description: Banana Claude, Claude Code, operating system, and Python versions
-      placeholder: "Banana Claude 3.0.0, Claude Code 2.x, Linux, Python 3.14"
+      placeholder: "Banana Claude 3.1.0, Claude Code 2.x, Linux, Python 3.14"
   - type: textarea
     id: logs
     attributes:

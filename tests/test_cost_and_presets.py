@@ -770,6 +770,52 @@ class PresetTests(unittest.TestCase):
 
             self.assertEqual(caught.exception.code, "invalid_preset")
 
+    def test_retired_preset_model_is_named_without_hiding_other_presets(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            preset_directory = Path(directory) / "presets"
+            preset_directory.mkdir(mode=0o700)
+            retired = self.valid_preset()
+            retired["name"] = "archived"
+            retired["default_model"] = "gemini-2.5-flash-image"
+            (preset_directory / "archived.json").write_text(
+                json.dumps(retired), encoding="utf-8"
+            )
+            (preset_directory / "studio.json").write_text(
+                json.dumps(self.valid_preset()), encoding="utf-8"
+            )
+            for path in preset_directory.iterdir():
+                path.chmod(0o600)
+
+            listed = run_python("presets.py", "list", env={"BANANA_HOME": directory})
+            self.assertEqual(listed.returncode, 0, listed.stderr)
+            entries = json.loads(listed.stdout)["presets"]
+            self.assertEqual(
+                [entry["name"] for entry in entries], ["archived", "studio"]
+            )
+            self.assertEqual(entries[0]["error"], "retired_model")
+            self.assertIn("gemini-2.5-flash-image", entries[0]["message"])
+            self.assertIn("was retired", entries[0]["message"])
+            self.assertIn("gemini-nano-banana-2.1", entries[0]["message"])
+            self.assertEqual(
+                entries[1],
+                {"name": "studio", "description": "Approved visual direction"},
+            )
+
+            shown = run_python(
+                "presets.py", "show", "archived", env={"BANANA_HOME": directory}
+            )
+            self.assertEqual(shown.returncode, 1)
+            self.assertIn("retired_model", shown.stderr)
+            self.assertIn("was retired", shown.stderr)
+
+            with patch.dict(os.environ, {"BANANA_HOME": directory}, clear=False):
+                with self.assertRaises(BananaError) as caught:
+                    load_preset("archived")
+                self.assertEqual(caught.exception.code, "retired_model")
+                self.assertEqual(load_preset("studio")["name"], "studio")
+
     def test_atomic_json_nests_core_publication_recovery_details(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "studio.json"

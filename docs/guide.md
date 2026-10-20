@@ -10,6 +10,7 @@ focused references linked at the end.
 - Claude Code 2.1.199 or newer
 - Python 3.11 or newer, available as `python3`
 - A Gemini API key for a billing-enabled Google AI project
+- Linux or macOS for image generation and editing; on Windows, use WSL
 
 Current Gemini image routes do not have a free API inference tier. Review the
 plan and nominal estimate before every paid request. A nominal estimate is not
@@ -157,7 +158,7 @@ output again.
 ### Compare model routes
 
 ```text
-/banana-claude:banana portfolio compare a direct direction and one justified risk on Flash and Pro
+/banana-claude:banana portfolio compare a direct direction and one justified risk on Nano Banana 2.1 and Pro
 ```
 
 A portfolio can compare up to three prompts across three routes. It is capped at
@@ -166,10 +167,10 @@ aggregate nominal estimate appear before execution.
 
 ### Continue an image
 
-Flash and Pro can continue a stored provider interaction after the storage and
-retention choice is accepted. One-shot Interactions requests send `store: false`.
-Lite and the deprecated compatibility route iterate by attaching the accepted
-output as a new reference.
+Nano Banana 2.1, Pro, and the deprecated Nano Banana 2 route can continue a
+stored provider interaction after the storage and retention choice is accepted.
+One-shot Interactions requests send `store: false`.
+Lite iterates by attaching the accepted output as a new reference.
 
 Read the current retention details in
 [cost planning](../skills/banana/references/cost-tracking.md#storage-and-retention-disclosure).
@@ -202,7 +203,7 @@ without a separate brief file:
 ```bash
 python3 skills/banana/scripts/generate.py \
   --prompt "A quiet editorial still life" \
-  --model gemini-3.1-flash-image \
+  --model gemini-nano-banana-2.1 \
   --aspect-ratio 16:9 \
   --resolution 1K
 ```
@@ -228,12 +229,12 @@ never in the request URL.
 
 | Route | Use it for |
 |---|---|
-| Nano Banana 2 Lite | Fast, lower-cost 1K drafts and high-volume work |
-| Nano Banana 2 | General generation, editing, continuation, grounding, and video-derived work |
-| Nano Banana Pro | Complex instructions, text, localization, brand precision, and final assets |
+| Nano Banana 2.1 (default) | General generation, editing, continuation, grounding, and video-derived images |
+| Nano Banana 2 Lite | Fast 1K drafts and high-volume work without grounding |
+| Nano Banana Pro | Complex instructions, dense text, localization, brand precision, and final assets |
+| Nano Banana 2 (deprecated) | Only 512 drafts |
 
-There is also one deprecated compatibility route for existing work. Model
-status, features, pricing, and provider behavior can change. Check the dated
+Model status, features, pricing, and provider behavior can change. Check the dated
 [Gemini model reference](../skills/banana/references/gemini-models.md) before a
 release, procurement decision, or durable budget commitment.
 

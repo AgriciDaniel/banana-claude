@@ -27,10 +27,12 @@ from banana_core import (
     _directory_path_matches_fd,
     _exclusive_rename_at,
     _open_secure_directory,
+    canonical_image_size,
     enforce_json_nesting_limit,
     estimate_image_cost,
     get_model,
     normalize_image_size,
+    retired_model_ids,
     validate_approval_text,
 )
 
@@ -2808,11 +2810,23 @@ def reconcile_generation_attempt(
             "invalid_cost_attempt_digest",
             "Cost attempt digest must be one full lowercase SHA-256 digest.",
         )
-    selected, info = get_model(model)
-    normalized = normalize_image_size(resolution, info)
     normalized_batch = bool(batch)
-    unit_cost = estimate_image_cost(selected, normalized, batch=normalized_batch)
-    entry_cost = round(unit_cost * count, 4)
+    unit_cost: float | None
+    if type(model) is str and model in retired_model_ids():
+        # The catalog no longer prices a retired model, so an existing attempt is
+        # matched against the rate recorded with it when it was logged.
+        if type(resolution) is not str:
+            raise BananaError(
+                "unsupported_image_size",
+                "A retired-model attempt needs the exact resolution it was logged with.",
+            )
+        selected = model
+        normalized = canonical_image_size(resolution)
+        unit_cost = None
+    else:
+        selected, info = get_model(model)
+        normalized = normalize_image_size(resolution, info)
+        unit_cost = estimate_image_cost(selected, normalized, batch=normalized_batch)
 
     try:
         with ledger_lock() as (directory_descriptor, lock_descriptor):
@@ -2828,16 +2842,25 @@ def reconcile_generation_attempt(
                     attempt_sha256=attempt_sha256,
                     reason="attempt_digest_conclusively_absent",
                 )
-            if len(matching_attempts) == 1 and _attempt_entry_matches(
-                matching_attempts[0],
-                model=selected,
-                resolution=normalized,
-                count=count,
-                cost=entry_cost,
-                unit_cost=unit_cost,
-                batch=normalized_batch,
-                label=checked_label,
-                interaction_id_sha256=interaction_id_sha256,
+            expected_unit_cost = unit_cost
+            if expected_unit_cost is None:
+                recorded_rate = matching_attempts[0].get("image_output_rate_usd")
+                if _nonnegative_number(recorded_rate):
+                    expected_unit_cost = float(cast(int | float, recorded_rate))
+            if (
+                len(matching_attempts) == 1
+                and expected_unit_cost is not None
+                and _attempt_entry_matches(
+                    matching_attempts[0],
+                    model=selected,
+                    resolution=normalized,
+                    count=count,
+                    cost=round(expected_unit_cost * count, 4),
+                    unit_cost=expected_unit_cost,
+                    batch=normalized_batch,
+                    label=checked_label,
+                    interaction_id_sha256=interaction_id_sha256,
+                )
             ):
                 return _recorded_result(
                     ledger,

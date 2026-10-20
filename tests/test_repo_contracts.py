@@ -12,7 +12,7 @@ from pathlib import Path
 
 from tests._support import ROOT
 
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 LOCAL_STATE_PARTS = {
     ".banana",
     ".claude",
@@ -154,7 +154,7 @@ class RepositoryContractTests(unittest.TestCase):
         catalog = json.loads(
             (ROOT / "skills/banana/references/models.json").read_text(encoding="utf-8")
         )
-        self.assertEqual(catalog["verified_on"], "2026-08-29")
+        self.assertEqual(catalog["verified_on"], "2026-10-20")
         self.assertTrue(catalog["sources"])
         self.assertTrue(
             all(
@@ -186,11 +186,11 @@ class RepositoryContractTests(unittest.TestCase):
         ]
         self.assertEqual(
             catalog["api_profiles"]["interactions"]["supported_models"],
-            ["gemini-3.1-flash-image", "gemini-3-pro-image"],
+            ["gemini-nano-banana-2.1", "gemini-3-pro-image", "gemini-3.1-flash-image"],
         )
         self.assertEqual(
             catalog["api_profiles"]["generate_content"]["supported_models"],
-            ["gemini-3.1-flash-lite-image", "gemini-2.5-flash-image"],
+            ["gemini-3.1-flash-lite-image"],
         )
         self.assertEqual(interactions_live["reported_on"], "2026-08-28")
         self.assertNotIn("verified_on", interactions_live)
@@ -324,11 +324,20 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn(f'repository-code: "{repository_url}"', citation)
         self.assertIn(f'url: "{repository_url}"', citation)
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-        release_heading = f"## [{VERSION}] - 2026-08-30"
+        release_heading = f"## [{VERSION}] - 2026-10-20"
         self.assertIn(release_heading, changelog)
         unreleased = changelog.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
         self.assertEqual(unreleased.strip(), "")
-        release_section = changelog.split(release_heading, 1)[1].split("\n## ", 1)[0]
+        current_section = changelog.split(release_heading, 1)[1].split("\n## ", 1)[0]
+        self.assertIn("gemini-nano-banana-2.1", current_section)
+        self.assertIn(f".github/releases/v{VERSION}.md", current_section)
+        self.assertIn(
+            f"# Banana Claude {VERSION}",
+            (ROOT / f".github/releases/v{VERSION}.md").read_text(encoding="utf-8"),
+        )
+        version_3_heading = "## [3.0.0] - 2026-08-30"
+        self.assertIn(version_3_heading, changelog)
+        release_section = changelog.split(version_3_heading, 1)[1].split("\n## ", 1)[0]
         self.assertIn("Portfolio and edit MCP schemas", release_section)
         self.assertIn("reported provider probes", release_section)
         self.assertIn("Pinned development-only Ruff and Mypy", release_section)
@@ -383,7 +392,7 @@ class RepositoryContractTests(unittest.TestCase):
 
         self.assertIn("screenshots/banana-claude-character-loop.gif", readme)
         self.assertIn(".github/releases/v3.0.0.md", changelog)
-        self.assertIn('date-released: "2026-08-30"', citation)
+        self.assertIn('date-released: "2026-10-20"', citation)
         self.assertIn("*.gif binary", attributes)
         self.assertIn("*.webp binary", attributes)
         highlights_text = highlights.read_text(encoding="utf-8")
@@ -467,6 +476,7 @@ class RepositoryContractTests(unittest.TestCase):
 
     def test_retired_models_appear_only_in_explicit_history(self) -> None:
         retired = {
+            "gemini-2.5-flash-image",
             "gemini-3.1-flash-image-preview",
             "gemini-3-pro-image-preview",
             "gemini-2.5-flash-image-preview",
@@ -700,15 +710,14 @@ class RepositoryContractTests(unittest.TestCase):
             ROOT / "skills/banana",
         ]
         forbidden = {
-            "Flash or Lite": "video input is Flash Image only",
-            "Google also documents Lite video-to-image": (
-                "video input is Flash Image only"
+            "Flash or Lite": (
+                "Banana routes video input to Nano Banana 2.1 and Flash Image, not Lite"
             ),
-            "video-to-image for both Gemini 3.1 Flash and Lite": (
-                "video input is Flash Image only"
+            "Flash Image only": (
+                "Banana routes video input to Nano Banana 2.1 and Flash Image"
             ),
-            "Google documents Flash and Lite video context": (
-                "video input is Flash Image only"
+            "nano-banana-2-1-video-documentation-conflict": (
+                "the Nano Banana 2.1 video conflict was resolved"
             ),
             "provider role": "reference roles are Banana prompt annotations",
             "provider category": "reference categories are Banana policy",
@@ -840,7 +849,7 @@ class RepositoryContractTests(unittest.TestCase):
             .splitlines()
             if line and not line.startswith("#")
         ]
-        self.assertEqual(requirements, ["mypy==2.3.1", "ruff==0.16.5"])
+        self.assertEqual(requirements, ["mypy==2.4.0", "ruff==0.17.0"])
         tool_config = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         self.assertIn('target-version = "py311"', tool_config)
         self.assertIn('select = ["E4", "E7", "E9", "F", "I"]', tool_config)

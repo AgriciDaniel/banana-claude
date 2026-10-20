@@ -24,17 +24,20 @@ editing, visual review, and bounded multi-model comparison.
 - `tests/` contains deterministic offline coverage. Public CI never calls a
   paid provider.
 
-## Provider state, verified 2026-08-29
+## Provider state, verified 2026-10-20
 
+- `gemini-nano-banana-2.1`: GA 2026-10-06, general default with 1K, 2K, 4K,
+  minimal, medium, or high thinking, Web and Image Search, and video-derived
+  images. No 512.
 - `gemini-3.1-flash-lite-image`: GA, 1K draft and high-volume route.
-- `gemini-3.1-flash-image`: GA, general default with 512, 1K, 2K, 4K,
-  Web and Image Search, and video-derived image support.
 - `gemini-3-pro-image`: GA, precision and professional route.
-- `gemini-2.5-flash-image`: deprecated, compatibility only, scheduled shutdown
-  2026-10-02, routed through generateContent without `imageSize`.
+- `gemini-3.1-flash-image`: deprecated 2026-10-06 with no announced shutdown
+  date, kept only for 512 output.
 
-Preview image aliases shut down 2026-06-25. Imagen 4 Gemini API endpoints shut
-down 2026-08-17. Recheck Google's primary documentation before release.
+Gemini 2.5 Flash Image is no longer routed; Google's pages disagree on its
+shutdown date. Preview image aliases shut down 2026-06-25. Imagen 4 Gemini API
+endpoints shut down 2026-08-17. Recheck Google's primary documentation before
+release.
 
 ## Development boundaries
 

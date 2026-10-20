@@ -30,7 +30,7 @@ from portfolio import (
 from typeset import compose_image, typeset_image
 
 SERVER_NAME = "banana-claude"
-SERVER_VERSION = "3.0.0"
+SERVER_VERSION = "3.1.0"
 DEFAULT_PROTOCOL_VERSION = "2025-06-18"
 LATEST_PROTOCOL_VERSION = "2025-11-25"
 SUPPORTED_PROTOCOL_VERSIONS = frozenset(
@@ -324,7 +324,7 @@ COMMON_PLAN_PROPERTIES: dict[str, Any] = {
     "image_size": {"type": "string", "default": "auto"},
     "references": {"type": "array", "items": REFERENCE_ITEM_SCHEMA, "default": []},
     "visual_brief": VISUAL_BRIEF_SCHEMA,
-    "thinking_level": {"type": "string", "enum": ["minimal", "high"]},
+    "thinking_level": {"type": "string", "enum": ["minimal", "medium", "high"]},
     "web_search": {"type": "boolean", "default": False},
     "image_search": {"type": "boolean", "default": False},
     "store": {"type": "boolean", "default": False},

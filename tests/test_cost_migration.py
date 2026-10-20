@@ -1520,6 +1520,86 @@ class CostMigrationTests(unittest.TestCase):
                 )
                 self.assertEqual(ledger_path().read_bytes(), before)
 
+    def test_reconcile_generation_attempt_accepts_retired_model_ledger_rate(
+        self,
+    ) -> None:
+        retired_model = "gemini-2.5-flash-image"
+        retired_rate = 0.039
+
+        def write_retired_attempt(attempt: str) -> bytes:
+            cost_tracker.record_generation(
+                model="gemini-3.1-flash-lite-image",
+                resolution="1K",
+                label="3.0.0 attempt",
+                attempt_sha256=attempt,
+            )
+            ledger = load_ledger()
+            entry = ledger["entries"][0]
+            entry["model"] = retired_model
+            entry["image_output_rate_usd"] = retired_rate
+            entry["estimated_image_output_usd"] = retired_rate
+            ledger["total_cost"] = retired_rate
+            ledger["daily"][entry["ts"][:10]]["estimated_image_output_usd"] = (
+                retired_rate
+            )
+            cost_tracker.save_ledger(ledger)
+            return ledger_path().read_bytes()
+
+        attempt = hashlib.sha256(b"retired-model-reconciliation").hexdigest()
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(os.environ, {"BANANA_HOME": directory}, clear=False),
+        ):
+            before = write_retired_attempt(attempt)
+            result = cost_tracker.reconcile_generation_attempt(
+                model=retired_model,
+                resolution="1k",
+                label="3.0.0 attempt",
+                attempt_sha256=attempt,
+            )
+            self.assertEqual(result["status"], "recorded")
+            self.assertTrue(result["logged"])
+            self.assertEqual(result["attempt_sha256"], attempt)
+            self.assertEqual(result["entry"]["model"], retired_model)
+            self.assertEqual(result["entry"]["image_output_rate_usd"], retired_rate)
+            self.assertEqual(ledger_path().read_bytes(), before)
+
+            for case, overrides in (
+                ("resolution", {"resolution": "2K"}),
+                ("count", {"count": 2}),
+                ("label", {"label": "different attempt"}),
+                ("model", {"model": "gemini-3.1-flash-image-preview"}),
+            ):
+                with self.subTest(case=case):
+                    arguments: dict[str, Any] = {
+                        "model": retired_model,
+                        "resolution": "1K",
+                        "label": "3.0.0 attempt",
+                        "attempt_sha256": attempt,
+                    }
+                    arguments.update(overrides)
+                    with self.assertRaises(BananaError) as caught:
+                        cost_tracker.reconcile_generation_attempt(**arguments)
+                    self.assertEqual(
+                        caught.exception.code,
+                        "cost_recording_unknown_requires_reconciliation",
+                    )
+                    self.assertEqual(ledger_path().read_bytes(), before)
+
+            absent = hashlib.sha256(b"retired-model-absent").hexdigest()
+            with self.assertRaises(BananaError) as missing:
+                cost_tracker.reconcile_generation_attempt(
+                    model=retired_model,
+                    resolution="1K",
+                    attempt_sha256=absent,
+                )
+            self.assertEqual(missing.exception.code, "cost_recording_not_recorded")
+
+            with self.assertRaises(BananaError) as new_record:
+                cost_tracker.record_generation(model=retired_model, resolution="1K")
+            self.assertEqual(new_record.exception.code, "retired_model")
+            self.assertEqual(ledger_path().read_bytes(), before)
+
     def test_reconcile_generation_attempt_rejects_invalid_digest(self) -> None:
         with self.assertRaises(BananaError) as caught:
             cost_tracker.reconcile_generation_attempt(

@@ -77,7 +77,7 @@ def plan_csv(path: Path, *, max_count: int, provider_batch: bool) -> dict[str, A
                     )
                     continue
                 prompt = (row.get("prompt") or "").strip()
-                model = (row.get("model") or "gemini-3.1-flash-image").strip()
+                model = (row.get("model") or "gemini-nano-banana-2.1").strip()
                 ratio = (row.get("ratio") or "1:1").strip()
                 requested_size = (row.get("resolution") or "auto").strip()
                 preset = (row.get("preset") or "").strip()

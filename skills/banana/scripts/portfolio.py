@@ -242,6 +242,7 @@ def public_portfolio_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 "request_fingerprint": item["plan"]["request_fingerprint"],
                 "model": item["plan"]["model"],
                 "model_name": item["plan"]["model_name"],
+                "model_status": item["plan"]["model_status"],
                 "api_surface": item["plan"]["api_surface"],
                 "api_endpoint": item["plan"]["api_endpoint"],
                 "catalog_verified_on": item["plan"]["catalog_verified_on"],
@@ -258,6 +259,7 @@ def public_portfolio_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 "estimate_is_invoice_cap": item["plan"]["estimate_is_invoice_cap"],
                 "output_count_uncertain": item["plan"]["output_count_uncertain"],
                 "provider_attempt_count": item["plan"]["provider_attempt_count"],
+                "thinking_level": item["plan"]["thinking_level"],
                 "thinking_behavior": item["plan"]["thinking_behavior"],
                 "thinking_documentation_conflict": item["plan"][
                     "thinking_documentation_conflict"
@@ -286,6 +288,12 @@ def public_portfolio_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "structured_brief_required": True,
         "structured_brief_reasons": ["portfolio"],
         "models": [item["model"] for item in public["items"]],
+        "model_statuses": {
+            item["model"]: item["model_status"] for item in public["items"]
+        },
+        "image_output_rates_usd": {
+            item["model"]: item["image_output_rate_usd"] for item in public["items"]
+        },
         "comparison_image_size": plan["comparison_image_size"],
         "output_mime_type": plan["output_mime_type"],
         "provider_attempt_count": plan["provider_attempt_count"],

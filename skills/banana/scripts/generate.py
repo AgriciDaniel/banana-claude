@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Plan or execute a Gemini image generation"
     )
     parser.add_argument("--prompt", required=True)
-    parser.add_argument("--model", default="gemini-3.1-flash-image")
+    parser.add_argument("--model", default="gemini-nano-banana-2.1")
     parser.add_argument("--aspect-ratio", default="1:1")
     parser.add_argument("--resolution", default="auto")
     parser.add_argument(
@@ -64,13 +64,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--video-url",
         help=(
-            "HTTPS YouTube watch or short URL syntax, Flash Image only; "
+            "HTTPS YouTube watch or short URL syntax, Nano Banana 2.1 or Flash Image; "
             "existence, public status, and Google accessibility are user-asserted, "
             "not preflighted; an inaccessible URL can consume the one paid attempt"
         ),
     )
     parser.add_argument("--previous-interaction-id")
-    parser.add_argument("--thinking", choices=["minimal", "high"])
+    parser.add_argument("--thinking", choices=["minimal", "medium", "high"])
     parser.add_argument("--web-search", action="store_true")
     parser.add_argument("--image-search", action="store_true")
     parser.add_argument(
