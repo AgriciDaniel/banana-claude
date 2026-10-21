@@ -320,6 +320,13 @@ higher level can raise cost and latency.
   Imagen-style `sampleCount` parameter, so the billed output count remains
   uncertain until the response and provider bill are available. The client
   makes one provider attempt per approval.
+- Results and sidecars report Google's documented token usage: totals for
+  input, output, thinking, cached, and tool-use tokens, and per-modality lists
+  such as `output_tokens_by_modality`. Field names follow the Interactions
+  `Usage` and generateContent `UsageMetadata` references
+  (<https://ai.google.dev/api/interactions>,
+  <https://ai.google.dev/api/generate-content#UsageMetadata>). Banana does not
+  convert tokens into a price; the provider bill is authoritative.
 - Multi-turn editing and reference-based consistency are supported, not
   guaranteed. Drift remains possible.
 - Server-managed continuation is available only on the Interactions routes

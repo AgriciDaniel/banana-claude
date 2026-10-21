@@ -46,22 +46,51 @@ BIDI_CONTROL_CODEPOINTS = frozenset(
 )
 TRANSIENT_HTTP_CODES = {408, 429, 500, 502, 503, 504}
 SUPPORTED_THINKING_LEVELS = {"minimal", "medium", "high"}
-USAGE_TOKEN_KEYS = frozenset(
+# Usage field names follow Google's Interactions `Usage` and generateContent
+# `UsageMetadata` references exactly, so persisted keys map 1:1 to the docs.
+INTERACTIONS_USAGE_COUNT_KEYS = frozenset(
     {
-        "input_tokens",
-        "output_tokens",
+        "total_input_tokens",
+        "total_output_tokens",
+        "total_thought_tokens",
+        "total_cached_tokens",
+        "total_tool_use_tokens",
         "total_tokens",
-        "cached_input_tokens",
-        "thoughts_tokens",
-        "tool_use_prompt_tokens",
-        "promptTokenCount",
-        "candidatesTokenCount",
-        "totalTokenCount",
-        "cachedContentTokenCount",
-        "thoughtsTokenCount",
-        "toolUsePromptTokenCount",
     }
 )
+INTERACTIONS_USAGE_MODALITY_KEYS = frozenset(
+    {
+        "input_tokens_by_modality",
+        "output_tokens_by_modality",
+        "cached_tokens_by_modality",
+        "tool_use_tokens_by_modality",
+    }
+)
+INTERACTIONS_USAGE_MODALITIES = frozenset(
+    {"text", "image", "audio", "video", "document"}
+)
+GENERATE_CONTENT_USAGE_COUNT_KEYS = frozenset(
+    {
+        "promptTokenCount",
+        "candidatesTokenCount",
+        "thoughtsTokenCount",
+        "cachedContentTokenCount",
+        "toolUsePromptTokenCount",
+        "totalTokenCount",
+    }
+)
+GENERATE_CONTENT_USAGE_MODALITY_KEYS = frozenset(
+    {
+        "promptTokensDetails",
+        "candidatesTokensDetails",
+        "cacheTokensDetails",
+        "toolUsePromptTokensDetails",
+    }
+)
+GENERATE_CONTENT_USAGE_MODALITIES = frozenset(
+    {"TEXT", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT", "MODALITY_UNSPECIFIED"}
+)
+MAX_USAGE_MODALITY_ENTRIES = 8
 MAX_PROVIDER_TOKEN_COUNT = 2**63 - 1
 PROVIDER_ERROR_STATUSES = frozenset(
     {
@@ -1880,15 +1909,53 @@ def _provider_identifier_digest(value: Any) -> str | None:
     return hashlib.sha256(candidate.encode("utf-8")).hexdigest()
 
 
-def _safe_usage(value: Any) -> dict[str, int]:
-    """Keep only documented scalar token counts from provider metadata."""
+def _safe_token_count(value: Any) -> int | None:
+    if type(value) is int and 0 <= value <= MAX_PROVIDER_TOKEN_COUNT:
+        return value
+    return None
+
+
+def _safe_usage(
+    value: Any,
+    *,
+    count_keys: frozenset[str],
+    modality_keys: frozenset[str],
+    allowed_modalities: frozenset[str],
+    count_field: str,
+) -> dict[str, int | list[dict[str, str | int]]]:
+    """Keep only documented token counts and per-modality token lists.
+
+    A modality outside the allowlist is recorded as "unknown" so its tokens
+    are not silently lost; every other provider field is dropped.
+    """
     if not isinstance(value, dict):
         return {}
-    usage: dict[str, int] = {}
-    for key in USAGE_TOKEN_KEYS:
-        count = value.get(key)
-        if type(count) is int and 0 <= count <= MAX_PROVIDER_TOKEN_COUNT:
+    usage: dict[str, int | list[dict[str, str | int]]] = {}
+    for key in sorted(count_keys):
+        count = _safe_token_count(value.get(key))
+        if count is not None:
             usage[key] = count
+    canonical_modalities = {item.lower(): item for item in allowed_modalities}
+    for key in sorted(modality_keys):
+        entries = value.get(key)
+        if not isinstance(entries, list):
+            continue
+        safe_entries: list[dict[str, str | int]] = []
+        for entry in entries[:MAX_USAGE_MODALITY_ENTRIES]:
+            if not isinstance(entry, dict):
+                continue
+            count = _safe_token_count(entry.get(count_field))
+            if count is None:
+                continue
+            modality = entry.get("modality")
+            safe_modality = (
+                canonical_modalities.get(modality.strip().lower(), "unknown")
+                if isinstance(modality, str)
+                else "unknown"
+            )
+            safe_entries.append({"modality": safe_modality, count_field: count})
+        if safe_entries:
+            usage[key] = safe_entries
     return usage
 
 
@@ -2243,7 +2310,13 @@ def extract_interaction(response: dict[str, Any]) -> dict[str, Any]:
         "text": "\n".join(texts).strip(),
         "citations": citations,
         "search_suggestions": list(dict.fromkeys(search_suggestions)),
-        "usage": _safe_usage(response.get("usage")),
+        "usage": _safe_usage(
+            response.get("usage"),
+            count_keys=INTERACTIONS_USAGE_COUNT_KEYS,
+            modality_keys=INTERACTIONS_USAGE_MODALITY_KEYS,
+            allowed_modalities=INTERACTIONS_USAGE_MODALITIES,
+            count_field="tokens",
+        ),
     }
 
 
@@ -2382,7 +2455,11 @@ def extract_generate_content(response: dict[str, Any], *, model: str) -> dict[st
         "citations": [],
         "search_suggestions": [],
         "usage": _safe_usage(
-            response.get("usageMetadata") or response.get("usage_metadata")
+            response.get("usageMetadata") or response.get("usage_metadata"),
+            count_keys=GENERATE_CONTENT_USAGE_COUNT_KEYS,
+            modality_keys=GENERATE_CONTENT_USAGE_MODALITY_KEYS,
+            allowed_modalities=GENERATE_CONTENT_USAGE_MODALITIES,
+            count_field="tokenCount",
         ),
     }
 

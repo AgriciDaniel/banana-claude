@@ -553,6 +553,106 @@ class ResponseTests(unittest.TestCase):
             {"totalTokenCount": 42, "cachedContentTokenCount": 7},
         )
 
+    def test_interactions_usage_keeps_documented_totals_and_modalities(self) -> None:
+        # Google's Interactions API reference example, plus an image output entry.
+        documented = {
+            "total_input_tokens": 268,
+            "total_output_tokens": 1120,
+            "total_thought_tokens": 400,
+            "total_cached_tokens": 0,
+            "total_tool_use_tokens": 0,
+            "total_tokens": 1788,
+            "input_tokens_by_modality": [
+                {"modality": "text", "tokens": 10},
+                {"modality": "image", "tokens": 258},
+            ],
+            "output_tokens_by_modality": [{"modality": "image", "tokens": 1120}],
+        }
+        response = completed_response()
+        response["usage"] = dict(documented)
+        self.assertEqual(extract_interaction(response)["usage"], documented)
+
+    def test_interactions_usage_drops_undocumented_and_hostile_fields(self) -> None:
+        response = completed_response()
+        response["usage"] = {
+            "total_tokens": 42,
+            "input_tokens": 5,
+            "output_tokens": 6,
+            "thoughts_tokens": 7,
+            "totalTokenCount": 8,
+            "candidatesTokensDetails": [{"modality": "IMAGE", "tokenCount": 9}],
+            "total_output_tokens": True,
+            "total_input_tokens": -1,
+            "total_thought_tokens": 2**63,
+            "prompt": "private prompt sentinel",
+            "input_tokens_by_modality": "text",
+            "cached_tokens_by_modality": [
+                {"modality": "text", "tokens": True},
+                {"modality": "text", "tokens": -3},
+                {"modality": "text"},
+                "not an entry",
+            ],
+            "output_tokens_by_modality": [
+                {
+                    "modality": "IMAGE",
+                    "tokens": 1120,
+                    "prompt": "private prompt sentinel",
+                },
+                {"modality": "hologram", "tokens": 3},
+                {"modality": {"nested": "private prompt sentinel"}, "tokens": 4},
+            ],
+            "tool_use_tokens_by_modality": [
+                {"modality": "text", "tokens": index} for index in range(12)
+            ],
+        }
+        usage = extract_interaction(response)["usage"]
+        self.assertEqual(
+            usage,
+            {
+                "total_tokens": 42,
+                "output_tokens_by_modality": [
+                    {"modality": "image", "tokens": 1120},
+                    {"modality": "unknown", "tokens": 3},
+                    {"modality": "unknown", "tokens": 4},
+                ],
+                "tool_use_tokens_by_modality": [
+                    {"modality": "text", "tokens": index} for index in range(8)
+                ],
+            },
+        )
+        self.assertNotIn("private prompt sentinel", json.dumps(usage))
+
+    def test_generate_content_usage_keeps_documented_modality_details(self) -> None:
+        response = generate_content_response()
+        response["usageMetadata"] = {
+            "promptTokenCount": 12,
+            "candidatesTokenCount": 1120,
+            "thoughtsTokenCount": 30,
+            "totalTokenCount": 1162,
+            "promptTokensDetails": [{"modality": "TEXT", "tokenCount": 12}],
+            "candidatesTokensDetails": [
+                {"modality": "IMAGE", "tokenCount": 1120, "prompt": "sentinel"}
+            ],
+            "cacheTokensDetails": [{"modality": "video", "tokenCount": 5}],
+            "total_tokens": 99,
+            "output_tokens_by_modality": [{"modality": "image", "tokens": 1}],
+        }
+        usage = extract_generate_content(response, model="gemini-3.1-flash-lite-image")[
+            "usage"
+        ]
+        self.assertEqual(
+            usage,
+            {
+                "promptTokenCount": 12,
+                "candidatesTokenCount": 1120,
+                "thoughtsTokenCount": 30,
+                "totalTokenCount": 1162,
+                "promptTokensDetails": [{"modality": "TEXT", "tokenCount": 12}],
+                "candidatesTokensDetails": [{"modality": "IMAGE", "tokenCount": 1120}],
+                "cacheTokensDetails": [{"modality": "VIDEO", "tokenCount": 5}],
+            },
+        )
+
     def test_generate_content_surfaces_prompt_and_candidate_safety_reasons(
         self,
     ) -> None:
@@ -774,6 +874,42 @@ class ResponseTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(image.stat().st_mode), 0o600)
             self.assertEqual(stat.S_IMODE(sidecar.stat().st_mode), 0o600)
             self.assertEqual(stat.S_IMODE(Path(directory).stat().st_mode), 0o700)
+
+    def test_sidecar_records_the_modality_usage_breakdown(self) -> None:
+        plan = build_plan(operation="generate", prompt="private prompt")
+        response = completed_response()
+        response["usage"] = {
+            "total_input_tokens": 8,
+            "total_output_tokens": 1120,
+            "total_thought_tokens": 272,
+            "total_tokens": 1400,
+            "output_tokens_by_modality": [
+                {"modality": "image", "tokens": 1120, "prompt": "private prompt"}
+            ],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = save_interaction(
+                extract_interaction(response),
+                plan=plan,
+                prompt="private prompt",
+                destination=directory,
+                label="test asset",
+            )
+            sidecar = Path(artifacts[0]["metadata_path"])
+            metadata = json.loads(sidecar.read_text(encoding="utf-8"))
+            self.assertEqual(
+                metadata["usage"],
+                {
+                    "total_input_tokens": 8,
+                    "total_output_tokens": 1120,
+                    "total_thought_tokens": 272,
+                    "total_tokens": 1400,
+                    "output_tokens_by_modality": [
+                        {"modality": "image", "tokens": 1120}
+                    ],
+                },
+            )
+            self.assertNotIn("private prompt", sidecar.read_text("utf-8"))
 
     def test_recorded_prompt_matches_the_approved_normalized_prompt_hash(self) -> None:
         plan = build_plan(operation="generate", prompt="  normalized prompt  ")

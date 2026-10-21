@@ -236,10 +236,14 @@ Execution tools:
    fail closed;
 9. return `transport_ok: true`, `visual_review_status: needs_review`, absolute
    paths, hashes, byte counts, MIME types, dimensions when detectable,
-   allowlisted usage, and transient grounding attribution. A raw transient
-   interaction ID is returned only after the user explicitly approves
-   `store: true` for provider-managed continuation. Sidecars retain only a
-   one-way interaction-ID hash;
+   allowlisted usage, and transient grounding attribution. Usage keeps
+   Google's documented field names: on Interactions, `total_input_tokens`,
+   `total_output_tokens`, `total_thought_tokens`, `total_cached_tokens`,
+   `total_tool_use_tokens`, `total_tokens`, and the `*_tokens_by_modality`
+   lists; on generateContent, the `*TokenCount` fields and the `*TokensDetails`
+   lists. A raw transient interaction ID is returned only after the user
+   explicitly approves `store: true` for provider-managed continuation.
+   Sidecars retain only a one-way interaction-ID hash;
 10. precede every returned MCP image with its explicit identity and attribution;
 11. record only a short non-sensitive label in the private cost ledger unless
     raw prompt recording was explicitly requested.

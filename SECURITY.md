@@ -140,11 +140,13 @@ Grounding citations, links, and Search Suggestions are returned transiently to
 the initiating user and are not stored in metadata or the cost ledger.
 Provider JSON responses are limited to 128 MiB in memory, and provider error
 bodies to 1 MiB. An oversized response fails closed without writing an
-artifact. Persisted usage metadata is a closed set of bounded integer token
-counts. Provider status, finish, block, category, probability, and severity
-fields are mapped only through documented local allowlists; unknown values
-become a fixed generic marker. Billing classification uses the exact parsed
-error status, not raw body text. Arbitrary provider usage fields and error text
+artifact. Persisted usage metadata is a closed set of Google's documented,
+bounded integer token counts plus at most eight per-modality entries per
+breakdown, each holding only an allowlisted modality name (or `unknown`) and a
+bounded count. Provider status, finish, block, category, probability, and
+severity fields are mapped only through documented local allowlists; unknown
+values become a fixed generic marker. Billing classification uses the exact
+parsed error status, not raw body text. Arbitrary provider usage fields and error text
 are never copied into sidecars or user-visible errors. Raw interaction
 identifiers stay transient, while sidecars retain only one-way SHA-256
 references.

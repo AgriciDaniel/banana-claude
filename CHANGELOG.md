@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Token usage now keeps Google's documented field names and per-modality
+  breakdowns for both APIs. Before, only the grand total survived on
+  Interactions routes because Banana looked for undocumented field names.
+  Grounding tool counts and service tier are not recorded, and Banana does not
+  convert tokens into a price.
 - Legacy 1.4.1 presets that used 512 migrate to the deprecated Flash route
   instead of failing.
 - A 3.0.0 cost-ledger attempt for a retired model can still be reconciled.
