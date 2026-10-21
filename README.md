@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/AgriciDaniel/banana-claude/actions/workflows/validate.yml"><img alt="Validation" src="https://github.com/AgriciDaniel/banana-claude/actions/workflows/validate.yml/badge.svg"></a>
-  <a href="https://github.com/AgriciDaniel/banana-claude/releases/latest"><img alt="Version 3.0.0" src="https://img.shields.io/badge/version-3.0.0-ff7b6b"></a>
+  <a href="https://github.com/AgriciDaniel/banana-claude/releases/latest"><img alt="Version 3.1.0" src="https://img.shields.io/badge/version-3.1.0-ff7b6b"></a>
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-f4c542"></a>
 </p>
 
@@ -22,12 +22,15 @@ Banana Claude turns a plain-language creative request into a planned and
 reviewable Gemini image workflow. It shows the prompt, model, data settings,
 output destination, and nominal estimate before any paid request.
 
-Here's the skill, here's what it does, here's how to install it.
-
 ## Start here
 
 Requirements: Claude Code 2.1.199 or newer, Python 3.11 or newer with `python3`
 on `PATH`, and a Gemini API key for a billing-enabled Google AI project.
+Image generation and editing run on Linux and macOS. Native Windows is not yet
+supported because output publication needs an atomic no-replace rename that the
+client does not implement there; planning fails with
+`output_exclusive_rename_unavailable` before any provider call. Use WSL on
+Windows.
 
 ```text
 /plugin marketplace add AgriciDaniel/banana-claude
@@ -60,8 +63,8 @@ request when it matches your intent.
   social assets, and more.
 - **Edit:** make one clear change while protecting identity, geometry, and brand
   details.
-- **Continue:** iterate with stored Flash or Pro sessions, or attach the last
-  result as a fresh reference.
+- **Continue:** iterate with stored Nano Banana 2.1 or Pro sessions, or attach
+  the last result as a fresh reference.
 - **Compare:** test up to three prompts across three model routes in one bounded
   portfolio.
 - **Review:** check copy, crop, composition, consistency, artifacts, rights, and
@@ -69,10 +72,11 @@ request when it matches your intent.
 - **Typeset:** add approved copy, fonts, logos, and trusted raster art locally
   when exact text matters.
 
-Banana Claude routes across Google's current Nano Banana 2 Lite, Nano Banana 2,
-and Nano Banana Pro models. See the dated
+Banana Claude routes across Google's current Nano Banana 2.1 (the default),
+Nano Banana 2 Lite, and Nano Banana Pro models, and keeps the deprecated Nano
+Banana 2 route only for 512 drafts. See the dated
 [Gemini model reference](skills/banana/references/gemini-models.md) for current
-capabilities, pricing, and the deprecated compatibility route.
+capabilities and pricing.
 
 ## Built for control
 
@@ -111,7 +115,8 @@ history.
 - [MCP tools](skills/banana/references/mcp-tools.md): planning and execution
   contracts
 - [Security](SECURITY.md): credentials, approvals, outputs, state, and reporting
-- [Changelog](CHANGELOG.md) and [version 3 release notes](.github/releases/v3.0.0.md)
+- [Changelog](CHANGELOG.md), [version 3.1 release notes](.github/releases/v3.1.0.md),
+  and [version 3 release notes](.github/releases/v3.0.0.md)
 
 ## Contributing
 

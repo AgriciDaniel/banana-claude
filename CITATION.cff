@@ -10,8 +10,8 @@ authors:
 repository-code: "https://github.com/AgriciDaniel/banana-claude"
 url: "https://github.com/AgriciDaniel/banana-claude"
 license: MIT
-version: "3.0.0"
-date-released: "2026-08-30"
+version: "3.1.0"
+date-released: "2026-10-20"
 keywords:
   - ai-image-generation
   - claude-code

@@ -8,7 +8,7 @@ This guidance follows current Google image prompting principles and source-led
 visual direction practices. It does not claim access to a hidden model prompt,
 fixed component weights, magic words, or a universal word count.
 
-Primary Google sources, verified 2026-08-29:
+Primary Google sources, last checked 2026-10-18:
 
 - <https://ai.google.dev/gemini-api/docs/image-generation>
 - <https://deepmind.google/models/gemini-image/prompt-guide/>
@@ -22,7 +22,7 @@ Treat these as separate mechanisms:
 2. **Constraint:** freeze facts and elements that cannot drift.
 3. **Execution:** compile only relevant instructions for the selected model.
 4. **Review:** inspect the pixels against the frozen brief and choose Pass,
-   Targeted fix, or Regenerate.
+   Targeted fix, Regenerate, or Blocked.
 
 The prompt is not the source of truth. The brief is.
 
@@ -155,12 +155,14 @@ Avoid: generic glossy technology pedestal with floating particles.
 
 Give each reference one Banana prompt-annotation role and one semantic job. The
 role is `object`, `character`, or `style`; Banana's client-policy counts vary by
-model. The semantic `purpose` can be:
+model. The `purpose` names the job, such as identity or product geometry,
+composition only, palette and material response, or texture or medium.
 
-- A: identity or product geometry;
-- B: composition only;
-- C: palette and material response;
-- D: texture or medium.
+Banana labels attached images "Banana reference annotation 1", "2", and so on,
+in plan order. In the compiled prompt, refer to each image by that number and
+its job, for example: "Keep the exact bottle shape from reference 1; use only
+the color palette of reference 2." Avoid letters or nicknames the runtime does
+not attach.
 
 Give each upload an explicit, non-sensitive `disclosure_alias` that the user
 can recognize in the approval view, such as `front product photo`. Banana never
@@ -210,9 +212,24 @@ It is a scaffold, not a compulsory form. Action and location may be irrelevant
 for a logo. Camera terms can harm a flat diagram. A preservation edit needs a
 delta and locks more than a scene description.
 
-Use sparse labeled blocks for complex work and natural prose for simple work.
-Include every decision that materially changes the result, then remove repeated
-adjectives and low-information filler.
+Write the scene as natural, descriptive prose. Google's guide notes that a
+narrative paragraph usually produces a more coherent image than a list of
+disconnected words. Be specific: concrete materials, light, and color carry
+more control than stacked adjectives. For a complex scene with many elements,
+describe it in steps, such as the setting first, then the subject, then the
+details. Add short labeled lines only for hard constraints that must survive
+verbatim: exact copy, locks, an edit delta, or a safe area. Include every
+decision that materially changes the result, then remove repeated adjectives
+and low-information filler.
+
+Phrase the result positively: describe what should be there ("an empty, quiet
+street at dawn") rather than listing what to remove ("no cars, no people").
+Keep an explicit exclusion only when it protects a real constraint.
+
+Aspect ratio and image size are API parameters bound into the plan. Do not
+repeat them in prompt text, where a conflicting phrase only competes with the
+request setting. State only a safe area or crop requirement that the layout
+needs.
 
 Generic quality words such as "best quality" often add little. They are not
 banned. Google's own examples use terms such as "photorealistic",
@@ -223,26 +240,50 @@ they are more useful, not because the other words trigger a hidden penalty.
 
 ### New image
 
+Write one or two descriptive paragraphs, the way a director briefs a
+photographer or illustrator: the subject and what it is doing, the setting,
+the viewpoint and framing, the light, and the medium. Prefer concrete
+materials, light behavior, and color over adjectives. For photoreal work,
+camera angle, lens, and depth-of-field language is a legitimate control; for
+illustration, describe the medium, line, and shading instead. Then add a short
+labeled list only for hard constraints.
+
 ```text
-Create [asset] for [audience and placement]. [Subject, action, and context].
-Composition: [focal hierarchy, viewpoint, scale, depth, negative space, crop].
-Look: [medium, material, palette, edge or texture treatment]. Lighting:
-[source, direction, softness, contrast, shadow, reflections]. Preserve these
-locks: [...]. Output: [ratio, size, safe area].
+A three-quarter view of a cream ceramic espresso maker on a pale oak counter
+in a quiet kitchen just after sunrise. A narrow stripe of warm dawn light
+crosses the front dial and catches a thin curl of steam, while the rest of the
+machine sits in soft, cool shade. Shot as a product photograph with a 50mm lens
+at eye level, shallow depth of field, the background wall falling to a soft
+warm gray.
+
+LOCKS: exactly two chrome controls; silhouette matches reference 1.
+SAFE AREA: keep the upper-left third empty for headline copy.
 ```
 
 ### Change-only edit
 
 ```text
-Using reference A as the original, change only [target] to [new state].
+Using reference 1 as the original, change only [target] to [new state].
 Preserve exactly [identity, pose, geometry, crop, lighting, background, logo,
 and text]. Integrate the change with the existing [perspective, shadows,
-reflections, occlusion, and edge behavior]. Do not reconstruct or restyle any
-untouched area. Output [ratio and size].
+reflections, occlusion, and edge behavior]. Keep every untouched area as it is
+in reference 1, including the original framing.
 ```
 
 If the edit damages identity or structure, return to the original rather than
 editing the degraded result again.
+
+### Continuation turn
+
+With stored continuation, the model already has the prior image and turn.
+Write only the delta, conversationally: "Now move the cup to the right edge
+and make the light warmer." Restate any lock that must not drift, and reattach
+the canonical identity or product references rather than trusting the
+conversation to hold them. Change one variable, or one tightly related group,
+per turn so a regression can be traced to its cause. Without stored
+continuation, as on the Lite route, attach the accepted output as reference 1
+and phrase the turn as a change-only edit. Either way, each turn is a new paid
+attempt with its own plan and approval.
 
 ### Character consistency
 
@@ -277,19 +318,27 @@ A useful brand contract contains:
 ### Text-bearing image
 
 1. Freeze the copy before generation.
-2. Quote every exact string.
-3. Specify hierarchy, line breaks, alignment, placement, contrast, and safe
+2. Put every exact string in quotes.
+3. Describe the type style in words, such as "a bold, condensed sans-serif in
+   white" or "a hand-lettered brush script", rather than relying on a font name
+   the model may not know.
+4. For localized copy, name the language and script, for example "the Japanese
+   headline in Japanese kanji and kana".
+5. Specify hierarchy, line breaks, alignment, placement, contrast, and safe
    area.
-4. Ask the model not to invent additional copy.
-5. Inspect spelling and glyphs at delivery size.
-6. For logos, legal copy, exact brand fonts, or dense text, generate the visual
+6. Ask the model to render only the quoted copy.
+7. Inspect spelling and glyphs at delivery size.
+8. For logos, legal copy, exact brand fonts, or dense text, generate the visual
    field and compose deterministically afterward. The bundled `typeset.py`
    creates a self-contained SVG with ordered exact text blocks and trusted
    raster logo or art layers, and can embed an approved font.
 
 There is no verified universal 25-character limit for current Gemini image
 models. Text complexity is a risk signal, not a hard law. Google recommends
-establishing the text first and then asking the image model to render it.
+establishing the text first and then asking the image model to render it. For
+dense or multilingual text, the Pro route (`gemini-3-pro-image`) is the
+stronger choice, but no route guarantees accurate rendering, so review every
+glyph.
 
 ### Factual diagram or infographic
 
@@ -307,8 +356,9 @@ even when the Interactions request uses `store: false`.
 
 ### Video-derived image
 
-The current image guide documents video-to-image only for Gemini 3.1 Flash
-Image, so the bundled client rejects video input on every other route. Flash
+Banana routes video-to-image to Nano Banana 2.1 and the deprecated Gemini 3.1
+Flash Image route. Google also documents video input for Lite, but Banana has
+not validated that generateContent path, so Lite and Pro reject video. Banana
 accepts only the supported HTTPS YouTube watch or short URL syntax with a
 syntactically valid 11-character video ID. Banana does not preflight whether
 the video exists, is public, or is accessible to Google. Passing the URL
@@ -338,8 +388,9 @@ logos. It becomes generic only when it has no reason.
 
 Treat lighting as an independent control. For photography, describe motivated
 source, direction, softness, contrast, color cast, shadow shape, reflections,
-and environmental continuity. Mention a camera or lens only when its optical
-behavior matters.
+and environmental continuity. Google's guide recommends photography terms for
+realistic images: camera angle, lens, depth of field, and lighting setup are
+legitimate controls when photorealism is the goal.
 
 For illustration, replace camera specifications with medium, edge treatment,
 line behavior, shading model, texture, palette, and layering. For product work,
@@ -350,8 +401,9 @@ hierarchy and legibility over cinematic atmosphere.
 
 The API has no separate negative-prompt field for Gemini image generation. Put
 necessary exclusions in the normal prompt. Positive semantic descriptions are
-often clearer, but explicit "do not invent copy" or "keep the background
-unchanged" clauses are legitimate controls.
+usually clearer ("an empty street" rather than "no cars"), but explicit
+"render only the quoted copy" or "keep the background unchanged" clauses are
+legitimate controls.
 
 Put critical locks early and label them. Do not rely on ALL CAPS as a magic
 adherence technique. When instructions conflict, resolve the conflict in the

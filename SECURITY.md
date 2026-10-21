@@ -4,12 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
+| 3.1.x   | Yes       |
 | 3.0.x   | Yes       |
 | < 3.0   | No        |
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Banana Claude, please report it responsibly.
+If you discover a security vulnerability in Banana Claude, please report it
+responsibly.
 
 **Do NOT open a public issue for security vulnerabilities.**
 
@@ -100,13 +102,13 @@ when an answer cannot be collected. Direct standalone scripts do not inherit
 that host boundary. Do not publish a live approval ID in an issue or log.
 
 Output MIME selection and the resolved provider response-format object are
-approval-bound. A redacted local Interactions probe using
-`gemini-3-pro-image` was reported on 2026-08-28 as rejecting PNG; it did not
-directly test `gemini-3.1-flash-image`. The current Interactions reference lists
-only JPEG, and the generateContent `ImageResponseFormat` enum exposes only
-`IMAGE_JPEG`. No durable probe-response digest is packaged.
-Every PNG output plan therefore fails locally before the key is read or any
-network call is made. PNG remains valid for checked input references and local
+approval-bound. A redacted local Interactions probe using `gemini-3-pro-image`
+was reported on 2026-08-28 as rejecting PNG; it did not directly test
+`gemini-3.1-flash-image` or `gemini-nano-banana-2.1`. The current Interactions
+reference lists only JPEG, and the generateContent `ImageResponseFormat` enum
+exposes only `IMAGE_JPEG`. No durable probe-response digest is packaged. Every
+PNG output plan therefore fails locally before the key is read or any network
+call is made. PNG remains valid for checked input references and local
 post-processing.
 
 The public approval plan exposes the exact compiled prompt and normalized brief
@@ -138,11 +140,13 @@ Grounding citations, links, and Search Suggestions are returned transiently to
 the initiating user and are not stored in metadata or the cost ledger.
 Provider JSON responses are limited to 128 MiB in memory, and provider error
 bodies to 1 MiB. An oversized response fails closed without writing an
-artifact. Persisted usage metadata is a closed set of bounded integer token
-counts. Provider status, finish, block, category, probability, and severity
-fields are mapped only through documented local allowlists; unknown values
-become a fixed generic marker. Billing classification uses the exact parsed
-error status, not raw body text. Arbitrary provider usage fields and error text
+artifact. Persisted usage metadata is a closed set of Google's documented,
+bounded integer token counts plus at most eight per-modality entries per
+breakdown, each holding only an allowlisted modality name (or `unknown`) and a
+bounded count. Provider status, finish, block, category, probability, and
+severity fields are mapped only through documented local allowlists; unknown
+values become a fixed generic marker. Billing classification uses the exact
+parsed error status, not raw body text. Arbitrary provider usage fields and error text
 are never copied into sidecars or user-visible errors. Raw interaction
 identifiers stay transient, while sidecars retain only one-way SHA-256
 references.

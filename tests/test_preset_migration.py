@@ -203,12 +203,92 @@ class LegacyPresetMigrationTests(unittest.TestCase):
             self.assertEqual(first_payload["proposal"]["default_aspect_ratio"], "16:9")
             self.assertEqual(first_payload["proposal"]["default_image_size"], "2K")
             self.assertEqual(
-                first_payload["proposal"]["default_model"], "gemini-3.1-flash-image"
+                first_payload["proposal"]["default_model"], "gemini-nano-banana-2.1"
             )
             self.assertEqual(first_payload["mapping"]["direct"]["colors"], "palette")
             self.assertEqual(path.read_bytes(), raw)
             self.assertFalse((home / "backups").exists())
             self.assertFalse((home / ".locks").exists())
+
+    def test_legacy_512_migrates_to_first_catalog_model_that_supports_it(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            self.write_legacy(home)
+            default_preview = run_python(
+                "presets.py",
+                "migrate-v1",
+                "studio",
+                "--dry-run",
+                env={"BANANA_HOME": directory},
+            )
+            self.assertEqual(default_preview.returncode, 0, default_preview.stderr)
+            self.assertEqual(
+                json.loads(default_preview.stdout)["mapping"]["default_model"],
+                "set to the current catalog default, gemini-nano-banana-2.1",
+            )
+
+        for legacy_size in ("512", "512px"):
+            with (
+                self.subTest(legacy_size=legacy_size),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                home = Path(directory)
+                path, raw = self.write_legacy(
+                    home, self.legacy_preset(default_resolution=legacy_size)
+                )
+                preview = run_python(
+                    "presets.py",
+                    "migrate-v1",
+                    "studio",
+                    "--dry-run",
+                    env={"BANANA_HOME": directory},
+                )
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                reviewed = json.loads(preview.stdout)
+                self.assertEqual(
+                    reviewed["proposal"]["default_model"], "gemini-3.1-flash-image"
+                )
+                self.assertEqual(reviewed["proposal"]["default_image_size"], "512")
+                self.assertEqual(
+                    reviewed["mapping"]["default_model"],
+                    "set to gemini-3.1-flash-image, the first catalog model that "
+                    "supports the legacy default_resolution 512, because the "
+                    "current catalog default, gemini-nano-banana-2.1, does not "
+                    "support it",
+                )
+                self.assertEqual(path.read_bytes(), raw)
+
+                confirmed = run_python(
+                    "presets.py",
+                    "migrate-v1",
+                    "studio",
+                    "--confirm",
+                    reviewed["fingerprint"],
+                    env={"BANANA_HOME": directory},
+                )
+                self.assertEqual(confirmed.returncode, 0, confirmed.stderr)
+                with patch.dict(os.environ, {"BANANA_HOME": directory}, clear=False):
+                    migrated = load_preset("studio")
+                self.assertEqual(migrated["default_model"], "gemini-3.1-flash-image")
+                self.assertEqual(migrated["default_image_size"], "512")
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            path, raw = self.write_legacy(
+                home, self.legacy_preset(default_resolution="8K")
+            )
+            rejected = run_python(
+                "presets.py",
+                "migrate-v1",
+                "studio",
+                "--dry-run",
+                env={"BANANA_HOME": directory},
+            )
+            self.assertEqual(rejected.returncode, 1)
+            self.assertIn("invalid_legacy_preset", rejected.stderr)
+            self.assertEqual(path.read_bytes(), raw)
 
     def test_bad_confirmation_does_not_mutate_or_create_migration_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

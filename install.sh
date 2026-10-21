@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SKILL_NAME="banana"
-INSTALL_VERSION="3.0.0"
+INSTALL_VERSION="3.1.0"
 INSTALL_ROOT="${HOME}/.claude/skills"
 SKILL_DIR="${INSTALL_ROOT}/${SKILL_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

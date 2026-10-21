@@ -1,6 +1,6 @@
 # Current Gemini image models
 
-Verified 2026-08-29 against Google's primary documentation. Machine-readable
+Verified 2026-10-20 against Google's primary documentation. Machine-readable
 capabilities and output prices live in `models.json` and are enforced by the
 scripts. Recheck Google before publishing because model status, pricing, rate
 limits, and Search terms are volatile.
@@ -9,10 +9,10 @@ Primary sources:
 
 - <https://ai.google.dev/gemini-api/docs/image-generation>
 - <https://ai.google.dev/gemini-api/docs/generate-content/image-generation>
+- <https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1>
 - <https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite-image>
-- <https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image>
 - <https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image>
-- <https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-image>
+- <https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image>
 - <https://ai.google.dev/gemini-api/docs/pricing>
 - <https://ai.google.dev/gemini-api/docs/changelog>
 - <https://ai.google.dev/gemini-api/docs/deprecations>
@@ -55,13 +55,22 @@ claim.
 
 | Model ID | Status | Client API | Route | Sizes | Grounding | Video input |
 |---|---|---|---|---|---|---|
-| `gemini-3.1-flash-lite-image` | GA | generateContent | Lowest-cost, low-latency drafts and high-volume 1K work | 1K | No | Documentation conflict, client rejects |
-| `gemini-3.1-flash-image` | GA | Interactions | Default general generation and editing | 512, 1K, 2K, 4K | Web and Image Search | HTTPS YouTube URL syntax, no access preflight |
+| `gemini-nano-banana-2.1` | GA | Interactions | Default general generation, editing, and video-derived images | 1K, 2K, 4K | Web and Image Search | HTTPS YouTube URL syntax, no access preflight |
+| `gemini-3.1-flash-lite-image` | GA | generateContent | Low-latency drafts and high-volume 1K work | 1K | No | Documented by Google, client path not validated, client rejects |
 | `gemini-3-pro-image` | GA | Interactions | Complex instructions, professional assets, text, localization, and brand precision | 1K, 2K, 4K | Web Search | No documented route |
-| `gemini-2.5-flash-image` | Deprecated | generateContent | Compatibility only | About 1K | No | No |
+| `gemini-3.1-flash-image` | Deprecated | Interactions | Only for 512 output | 512, 1K, 2K, 4K | Web and Image Search | HTTPS YouTube URL syntax, no access preflight |
 
-Google schedules `gemini-2.5-flash-image` to shut down on 2026-10-02. Prefer
-Lite for new low-cost 1K work.
+Nano Banana 2.1 (`gemini-nano-banana-2.1`) became GA on 2026-10-06 and is
+Google's recommended image model for new work. Google's DeepMind model card
+says it is based on Gemini 3.6 Flash. Google deprecated Nano Banana 2
+(`gemini-3.1-flash-image`) the same day without an announced shutdown date.
+Banana keeps it routable only for the one capability Nano Banana 2.1 lacks: the
+512 size. Nano Banana 2.1 is also cheaper at 1K, 2K, and 4K.
+
+Google deprecated `gemini-2.5-flash-image` with Lite as the replacement.
+Google's pages disagree on its shutdown date: the pricing page still says
+2026-10-02 while the deprecations page lists an earliest-possible 2027-03-15.
+Banana no longer routes it; use Lite or Nano Banana 2.1 for 1K work.
 
 The preview aliases `gemini-3.1-flash-image-preview` and
 `gemini-3-pro-image-preview` shut down on 2026-06-25. The stable Pro replacement
@@ -69,15 +78,15 @@ is `gemini-3-pro-image`. Imagen 4 Gemini API endpoints shut down on 2026-08-17.
 
 ## Selection rules
 
-- Start with Lite 1K for cheap concept exploration when long sequential edits,
-  grounding, and character consistency are not needed.
-- Use Flash for the normal create, edit, continuity, grounding, and
+- Start with Lite 1K for fast concept exploration when long sequential edits,
+  grounding, and character consistency are not needed. At 1K it costs the same
+  as Nano Banana 2.1.
+- Use Nano Banana 2.1 for the normal create, edit, continuity, grounding, and
   video-derived workflow.
+- Use the deprecated Flash route only for a 512 draft.
 - Use Pro when precise instructions, complex layouts, localization, text, brand
   consistency, style references, or a final professional asset justify its
   price and latency.
-- Use 2.5 only for an existing compatibility requirement. Do not build new
-  workflows around a deprecated endpoint.
 - Start at 1K. Move to 2K or 4K only when the intended delivery and review
   justify the cost. A 4K tier is ratio-specific and does not mean every output
   edge is capped at 4096 pixels.
@@ -87,12 +96,12 @@ is `gemini-3-pro-image`. Imagen 4 Gemini API endpoints shut down on 2026-08-17.
 
 ## Ratios and resolution
 
-Flash supports 14 ratios:
+Nano Banana 2.1 and Flash support 14 ratios:
 
 `1:1`, `1:4`, `1:8`, `2:3`, `3:2`, `3:4`, `4:1`, `4:3`, `4:5`, `5:4`,
 `8:1`, `9:16`, `16:9`, `21:9`.
 
-Pro and 2.5 use the ten conventional ratios. Banana also permits only these ten
+Pro uses the ten conventional ratios. Banana also permits only these ten
 ratios for Lite:
 
 `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`.
@@ -103,11 +112,15 @@ the current image-generation guide enumerates only the ten ratios above for
 Lite. Banana uses their ten-ratio intersection until Google resolves that
 documentation conflict.
 
-Flash resolution values are `512`, `1K`, `2K`, and `4K`. Lite is 1K only.
-Pro accepts `1K`, `2K`, and `4K`. The 2.5 route is 1K only. The client accepts
-`0.5K` as a user alias and normalizes it to the documented `512` API value.
+Nano Banana 2.1 accepts `1K`, `2K`, and `4K`; Google's guide says `512` is not
+supported on it. Flash resolution values are `512`, `1K`, `2K`, and `4K`. Lite
+is 1K only. Pro accepts `1K`, `2K`, and `4K`. The client accepts `0.5K` as a
+user alias and normalizes it to the documented `512` API value, which only the
+Flash route accepts. Google reports that Nano Banana 2.1 fixed tiling artifacts
+on the 1:4, 4:1, 1:8, and 8:1 ratios at 2K and 4K.
 
-Examples of Flash 4K tier dimensions:
+Examples of Flash 4K tier dimensions. Google publishes no per-ratio 4K table
+for Nano Banana 2.1; its pricing page gives 4096 x 4096 at 1:1.
 
 | Ratio | Dimensions |
 |---|---:|
@@ -124,15 +137,13 @@ models. It separately documents model-specific high-fidelity role guidance:
 | Model | Object references | Character references | Style references |
 |---|---:|---:|---:|
 | Lite | Up to 14 | Not documented | Not documented |
+| Nano Banana 2.1 | Up to 10 | Up to 4 | Not separately documented |
 | Flash | Up to 10 | Up to 4 | Not separately documented |
 | Pro | Up to 6 | Up to 5 | Up to 3 |
-| 2.5 | Google says it works best with up to 3 total | Not separately documented | Not separately documented |
 
-For 2.5, "works best with up to 3" is provider quality guidance, not a
-documented provider hard limit. Banana turns that guidance into a conservative
-three-image client policy. Banana also enforces the per-role counts in the
-table as client policy. These validation policies are represented separately
-from provider hard limits in `models.json`.
+Banana enforces the per-role counts in the table as client policy. These
+validation policies are represented separately from provider hard limits in
+`models.json`.
 
 The bundled client requires every reference to have a Banana prompt annotation
 role, `object`, `character`, or `style`. A required non-sensitive
@@ -149,9 +160,9 @@ provider-transmission decisions. Any unresolved decision blocks planning.
 
 Google describes Lite as useful for quick local iterative edits but not
 optimized for long sequential editing or complex multi-reference work. That is
-a model capability, not server-managed conversation state. Lite is not listed
-for the Interactions API, so this client routes it through generateContent and
-requires each iteration to reattach the accepted output as a new reference.
+a model capability, not server-managed conversation state. This client routes
+Lite through generateContent and requires each iteration to reattach the
+accepted output as a new reference.
 
 The bundled client limits inline references to 20 MB total and conservatively
 accepts PNG, JPEG, and WebP. Google's image-understanding documentation,
@@ -163,15 +174,12 @@ larger payloads or local video uploads.
 
 ## Interactions and generateContent
 
-Google recommends the GA Interactions API for new interactive projects. Its
-current model enum includes Flash, Pro, and the deprecated 2.5 image model, but
-not Gemini 3.1 Flash Lite Image. Banana uses Interactions for the two current
-full routes. It deliberately keeps the deprecated 2.5 compatibility model on
-the explicit generateContent legacy path documented by Google, where its
-aspect-ratio request omits unsupported `imageSize`. This is a client routing
-choice, not a claim that Google omits 2.5 from the Interactions model enum.
+Banana uses the Interactions API for Nano Banana 2.1, Pro, and the deprecated
+Flash route. Google's Interactions model enum now also lists Gemini 3.1 Flash
+Lite Image, but Banana keeps Lite on the generateContent path that its redacted
+Lite probe exercised.
 
-For Flash and Pro:
+For Nano Banana 2.1, Pro, and Flash:
 
 ```text
 POST https://generativelanguage.googleapis.com/v1beta/interactions
@@ -183,7 +191,7 @@ Example image request:
 
 ```json
 {
-  "model": "gemini-3.1-flash-image",
+  "model": "gemini-nano-banana-2.1",
   "input": [{"type": "text", "text": "A precise visual prompt"}],
   "response_format": {
     "type": "image",
@@ -200,14 +208,16 @@ The Interactions API reference lists only `image/jpeg`, while the current
 model-specific image guide shows both `image/png` and `image/jpeg` in REST
 requests. A redacted local Interactions probe using `gemini-3-pro-image` was
 reported on 2026-08-28 as rejecting `image/png` and naming `image/jpeg` as the
-supported value. It did not directly test `gemini-3.1-flash-image`, and no
-durable response digest is packaged. Banana therefore restricts Flash and Pro
-Interactions output to JPEG as a conservative API-surface policy and rejects
-PNG before network I/O. Every affected approval plan still exposes the source
+supported value. It did not directly test `gemini-3.1-flash-image` or
+`gemini-nano-banana-2.1`, it has not been re-run since, and no durable response
+digest is packaged. Banana therefore restricts every Interactions route's
+output to JPEG as a conservative API-surface policy and rejects PNG before
+network I/O. Every affected approval plan still exposes the source
 conflict, exact probe scope, and policy note.
 
-The current generateContent `ImageResponseFormat` schema likewise exposes only
-`IMAGE_JPEG` as a selectable output MIME. Its legacy image-generation guide
+The generateContent `ImageResponseFormat` schema, as last read in full on
+2026-08-29, likewise exposes only `IMAGE_JPEG` as a selectable output MIME. Its
+legacy image-generation guide
 uses PNG filenames in examples without defining an explicit PNG response enum.
 Banana therefore restricts every route to JPEG output. PNG remains accepted for
 validated input references and local post-processing.
@@ -232,7 +242,7 @@ review and retains its SHA-256 hash in the approval fingerprint. The prompt is
 transient by default: Banana does not write it to an artifact sidecar or cost
 ledger unless the user explicitly enables prompt recording.
 
-For Lite and the deprecated 2.5 compatibility model:
+For Lite:
 
 ```text
 POST https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-lite-image:generateContent
@@ -249,13 +259,14 @@ REST boundary to the current typed enums, for example `1:1` to
 `IMAGE_JPEG`. The resolved provider object is included in the approval
 fingerprint. A redacted local Lite probe was reported on 2026-08-28 as
 accepting the typed 1:1, 1K, and JPEG tuple and returning a 1024 by 1024
-`image/jpeg`; no durable response digest is packaged. The deprecated 2.5 request omits
-`imageSize`, which that model does not support. Google's legacy generateContent
-image guide says video-to-image is available on Flash and Lite. In conflict,
-the modern image-generation guide, current Lite model page and limitations, and
-May 28, 2026 changelog entry describe it as Flash Image only. Banana follows
-the corroborating current sources and rejects video input on Lite before key
-access or provider I/O, until Google resolves the documentation conflict.
+`image/jpeg`; it has not been re-run since, and no durable response digest is
+packaged. Google's Lite model page and image-generation guide now list
+video-to-image input for Lite. Banana has not validated its generateContent
+video request shape, so it still rejects video input on Lite before key access
+or provider I/O.
+
+Google's generateContent reference shows the `v1beta` path. Banana keeps the
+`v1` path above because that is the path the Lite probe exercised.
 
 `generateContent` also remains the basis for Google's true asynchronous Batch
 API and exposes fields not currently offered by Interactions. Banana's CSV
@@ -263,14 +274,14 @@ utility only validates a variation plan; it does not submit a Batch job.
 
 ## Grounding
 
-Flash supports Web Search, Image Search, or both. Image Search does not require
-Web Search to be selected in the same request:
+Nano Banana 2.1 and Flash support Web Search, Image Search, or both. Image
+Search does not require Web Search to be selected in the same request:
 
 ```json
 {"type": "google_search", "search_types": ["image_search"]}
 ```
 
-Pro supports Web Search. Lite and 2.5 do not support Search grounding for image
+Pro supports Web Search. Lite does not support Search grounding for image
 generation. Use grounding only when the image needs current factual context.
 Search can create additional charges per provider search query.
 
@@ -291,13 +302,15 @@ retention.
 
 ## Thinking controls
 
+Nano Banana 2.1 accepts `minimal`, `medium`, and `high`, and defaults to
+`medium`.
 The current legacy image guide says Flash and Lite default to `minimal` and
 allow `minimal` or `high`. The current Lite model page documents the same levels
 but does not state a default. Banana therefore uses `minimal` while exposing
 that source conflict in Lite approval plans. Pro uses its documented default
 reasoning process, but the current image guide does not document a
-client-selectable Pro level. Gemini 2.5 does not use the Gemini 3
-`thinking_level` control.
+client-selectable Pro level. Thinking tokens are billed as text output, so a
+higher level can raise cost and latency.
 
 ## Output, state, and limitations
 
@@ -307,21 +320,28 @@ client-selectable Pro level. Gemini 2.5 does not use the Gemini 3
   Imagen-style `sampleCount` parameter, so the billed output count remains
   uncertain until the response and provider bill are available. The client
   makes one provider attempt per approval.
+- Results and sidecars report Google's documented token usage: totals for
+  input, output, thinking, cached, and tool-use tokens, and per-modality lists
+  such as `output_tokens_by_modality`. Field names follow the Interactions
+  `Usage` and generateContent `UsageMetadata` references
+  (<https://ai.google.dev/api/interactions>,
+  <https://ai.google.dev/api/generate-content#UsageMetadata>). Banana does not
+  convert tokens into a price; the provider bill is authoritative.
 - Multi-turn editing and reference-based consistency are supported, not
   guaranteed. Drift remains possible.
-- Server-managed continuation is available only on the Flash and Pro
-  Interactions routes in this client. Lite and 2.5 can still be iterated by
-  reattaching the accepted output in a new request.
-- Google's legacy generateContent image guide documents video-to-image on Flash
-  and Lite, while the modern image guide, current Lite model page and
-  limitations, and May 28, 2026 changelog entry say Flash Image only. Banana
-  resolves this conflict conservatively: the bundled client accepts only the
-  supported HTTPS YouTube watch or short URL syntax for Flash, with a
-  syntactically valid 11-character video ID. It does not preflight whether the
+- Server-managed continuation is available only on the Interactions routes
+  (Nano Banana 2.1, Pro, and Flash) in this client. Lite can still be iterated
+  by reattaching the accepted output in a new request.
+- Google's image-generation guide lists video-to-image for Nano Banana 2.1,
+  Flash, and Lite. The bundled client routes video only to Nano Banana 2.1 and
+  Flash, and accepts only the supported HTTPS YouTube watch or short URL syntax
+  with a syntactically valid 11-character video ID. It does not preflight whether the
   video exists, is public, or is accessible to Google. Passing a URL asserts
   those conditions, and an inaccessible URL can consume the one paid provider
   attempt. Local video needs a Files API upload workflow outside this client.
-  Every non-Flash route rejects video before provider I/O.
+  Lite and Pro reject video before provider I/O. Google's DeepMind model card
+  for Nano Banana 2.1 lists only text and image input, but the Gemini API model
+  page and image guide list video, and Banana follows the API documentation.
 - The bundled paid surfaces make one provider attempt per approval. A 429, 5xx,
   network error, or timeout requires a fresh plan and user approval before a
   second attempt.
@@ -335,11 +355,11 @@ client-selectable Pro level. Gemini 2.5 does not use the Gemini 3
 
 ## Rights and provenance
 
-Google documents SynthID on all generated images covered by the image guide.
-Do not generalize the Google Cloud Enterprise Agent Platform C2PA contract to
-every Gemini Developer API response without byte-level verification. Image
-conversion, cropping, recompression, or metadata stripping can alter provenance
-metadata.
+Google's image-generation guide says all generated images include a SynthID
+watermark. Do not generalize the Google Cloud Enterprise Agent Platform C2PA
+contract to every Gemini Developer API response without byte-level
+verification. Image conversion, cropping, recompression, or metadata stripping
+can alter provenance metadata.
 
 The user must have rights to uploaded references and remains responsible for
 lawful use, attribution, and distribution. Do not present generated output as a

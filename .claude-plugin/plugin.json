@@ -1,9 +1,9 @@
 {
   "name": "banana-claude",
   "displayName": "Banana Claude",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "defaultEnabled": false,
-  "description": "Brief-led image generation, editing, visual review, and bounded multi-model orchestration with current Google Gemini image models. Requires Claude Code 2.1.199+ and Python 3.11+ with python3 on PATH.",
+  "description": "Brief-led image generation, editing, visual review, and bounded multi-model orchestration with current Google Gemini image models. Requires Claude Code 2.1.199+, Python 3.11+ with python3 on PATH, and Linux, macOS, or WSL for generation.",
   "author": {
     "name": "AgriciDaniel",
     "url": "https://github.com/AgriciDaniel"

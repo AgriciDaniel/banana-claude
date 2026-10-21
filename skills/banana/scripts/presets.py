@@ -27,6 +27,7 @@ from banana_core import (
     _open_secure_directory,
     enforce_json_nesting_limit,
     get_model,
+    models_supporting_image_size,
     normalize_image_size,
     validate_approval_text,
     validate_aspect_ratio,
@@ -810,7 +811,13 @@ def _legacy_v1_proposal(name: str, value: Any) -> dict[str, Any]:
             "invalid_legacy_preset", "Legacy preset colors must be a list of strings."
         )
 
-    default_model, _model_info = get_model()
+    default_model, default_model_info = get_model()
+    try:
+        normalize_image_size(value["default_resolution"], default_model_info)
+    except BananaError:
+        supporting_models = models_supporting_image_size(value["default_resolution"])
+        if supporting_models:
+            default_model = supporting_models[0]
     proposal = {
         "schema_version": 2,
         "name": name,
@@ -855,7 +862,16 @@ def _migration_fingerprint(raw: bytes, proposal: dict[str, Any]) -> str:
     return digest.hexdigest()
 
 
-def _migration_disclosure(default_model: str) -> dict[str, Any]:
+def _migration_disclosure(proposal: dict[str, Any]) -> dict[str, Any]:
+    proposed_model = str(proposal["default_model"])
+    catalog_default, _model_info = get_model()
+    model_disclosure = f"set to the current catalog default, {catalog_default}"
+    if proposed_model != catalog_default:
+        model_disclosure = (
+            f"set to {proposed_model}, the first catalog model that supports the "
+            f"legacy default_resolution {proposal['default_image_size']}, because "
+            f"the current catalog default, {catalog_default}, does not support it"
+        )
     return {
         "direct": {
             "name": "name",
@@ -878,7 +894,7 @@ def _migration_disclosure(default_model: str) -> dict[str, Any]:
             "references",
             "anti_references",
         ],
-        "default_model": f"set to the current catalog default, {default_model}",
+        "default_model": model_disclosure,
     }
 
 
@@ -2922,7 +2938,9 @@ def cmd_list(_args: argparse.Namespace) -> None:
                 {"name": preset["name"], "description": preset.get("description", "")}
             )
         except BananaError as exc:
-            output.append({"name": path.stem, "error": exc.code})
+            output.append(
+                {"name": path.stem, "error": exc.code, "message": exc.message}
+            )
     print(json.dumps({"presets": output}, indent=2))
 
 
@@ -2981,7 +2999,7 @@ def cmd_create(args: argparse.Namespace) -> None:
 
 def cmd_migrate_v1(args: argparse.Namespace) -> None:
     path, raw, proposal, fingerprint = _migration_material(args.name)
-    disclosure = _migration_disclosure(str(proposal["default_model"]))
+    disclosure = _migration_disclosure(proposal)
     if args.dry_run:
         print(
             json.dumps(
@@ -3470,7 +3488,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Reference JSON object with path, role, purpose, and optional subject_id; repeat as needed",
     )
     create.add_argument("--anti-reference", action="append", default=[])
-    create.add_argument("--model", default="gemini-3.1-flash-image")
+    create.add_argument("--model", default="gemini-nano-banana-2.1")
     create.add_argument("--ratio", default="16:9")
     create.add_argument("--resolution", default="1K")
     create.add_argument("--force", action="store_true")

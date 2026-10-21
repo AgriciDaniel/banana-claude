@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "verified_on": "2026-08-29",
+  "verified_on": "2026-10-20",
   "provider": "Google Gemini Developer API",
   "claim_ledger": {
     "schema_version": 1,
@@ -9,16 +9,19 @@
     "claims": [
       {
         "id": "current-image-model-routes",
-        "claim": "The current stable image model IDs used by Banana are Gemini 3.1 Flash Lite Image, Gemini 3.1 Flash Image, and Gemini 3 Pro Image.",
+        "claim": "The image model IDs routed by Banana are Gemini Nano Banana 2.1 (GA 2026-10-06, the recommended model for new work), Gemini 3.1 Flash Lite Image, Gemini 3 Pro Image, and the deprecated Gemini 3.1 Flash Image, which Google deprecated on 2026-10-06 without an announced shutdown date.",
         "evidence_type": "official_documentation",
         "source_urls": [
           "https://ai.google.dev/gemini-api/docs/image-generation",
+          "https://ai.google.dev/gemini-api/docs/changelog",
+          "https://ai.google.dev/gemini-api/docs/deprecations",
+          "https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1",
           "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite-image",
           "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image",
           "https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image"
         ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
@@ -27,20 +30,55 @@
         "id": "current-image-output-pricing",
         "claim": "The standard and Batch per-image output prices encoded in this catalog match Google's pricing table on the retrieval date.",
         "evidence_type": "official_documentation",
-        "source_urls": ["https://ai.google.dev/gemini-api/docs/pricing"],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "source_urls": [
+          "https://ai.google.dev/gemini-api/docs/pricing",
+          "https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1"
+        ],
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
       },
       {
-        "id": "gemini-2-5-image-shutdown",
-        "claim": "Gemini 2.5 Flash Image is deprecated with a documented shutdown date of 2026-10-02.",
+        "id": "gemini-2-5-image-retired",
+        "claim": "Google deprecated Gemini 2.5 Flash Image with Gemini 3.1 Flash Lite Image as the replacement. Google pages disagree on its shutdown date (2026-10-02 on the pricing page, an earliest-possible 2027-03-15 on the deprecations page), so Banana no longer routes it.",
         "evidence_type": "official_documentation",
-        "source_urls": ["https://ai.google.dev/gemini-api/docs/deprecations"],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-12",
+        "source_urls": [
+          "https://ai.google.dev/gemini-api/docs/deprecations",
+          "https://ai.google.dev/gemini-api/docs/pricing"
+        ],
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
+        "evidence_digest": {"sha256": null, "status": "not_captured"},
+        "independently_auditable_from_package": false,
+        "current_source_recheck_possible": true
+      },
+      {
+        "id": "nano-banana-2-1-contract",
+        "claim": "Gemini Nano Banana 2.1 is a GA Interactions image model with 1K (default), 2K, and 4K output and no 512 size, the fourteen documented aspect ratios, up to 14 references including up to 10 objects and 4 characters, minimal, medium (default), and high thinking levels, editing, and Google Web and Image Search grounding.",
+        "evidence_type": "official_documentation",
+        "source_urls": [
+          "https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1",
+          "https://ai.google.dev/gemini-api/docs/image-generation",
+          "https://ai.google.dev/gemini-api/docs/changelog"
+        ],
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
+        "evidence_digest": {"sha256": null, "status": "not_captured"},
+        "independently_auditable_from_package": false,
+        "current_source_recheck_possible": true
+      },
+      {
+        "id": "nano-banana-2-1-video-input",
+        "claim": "Google's Nano Banana 2.1 model page lists text, image, video, and PDF input, and the image-generation guide lists Nano Banana 2.1 for video-to-image. The DeepMind model card lists only text and image input; Banana follows the Gemini API documentation and routes video input to Nano Banana 2.1.",
+        "evidence_type": "official_documentation",
+        "source_urls": [
+          "https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1",
+          "https://ai.google.dev/gemini-api/docs/image-generation"
+        ],
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
@@ -53,8 +91,8 @@
           "https://ai.google.dev/gemini-api/docs/interactions-overview",
           "https://ai.google.dev/gemini-api/docs/zdr"
         ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
@@ -63,12 +101,9 @@
         "id": "search-grounding-retention",
         "claim": "Google retains Search-grounded request and response data for 30 days independently of store false.",
         "evidence_type": "official_documentation",
-        "source_urls": [
-          "https://ai.google.dev/gemini-api/docs/image-generation",
-          "https://ai.google.dev/gemini-api/terms"
-        ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "source_urls": ["https://ai.google.dev/gemini-api/docs/zdr", "https://ai.google.dev/gemini-api/terms"],
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
@@ -81,15 +116,15 @@
           "https://ai.google.dev/api/interactions-api",
           "https://ai.google.dev/gemini-api/docs/image-generation"
         ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
       },
       {
         "id": "generate-content-jpeg-enum",
-        "claim": "The current generateContent ImageResponseFormat enum exposes IMAGE_JPEG as the selectable image output MIME.",
+        "claim": "The current generateContent ImageResponseFormat enum exposes IMAGE_JPEG as the selectable image output MIME. Stale: the reference section could not be read in full on 2026-10-20.",
         "evidence_type": "official_documentation",
         "source_urls": ["https://ai.google.dev/api/generate-content"],
         "retrieved_on": "2026-08-29",
@@ -100,7 +135,7 @@
       },
       {
         "id": "current-image-formats-and-reference-limits",
-        "claim": "The image sizes, documented aspect ratios, and reference-image limits encoded for the three current image models match Google's model-specific and image-generation documentation on the retrieval date.",
+        "claim": "The image sizes, documented aspect ratios, and reference-image limits encoded for the four routed image models match Google's model-specific and image-generation documentation on the retrieval date.",
         "evidence_type": "official_documentation",
         "source_urls": [
           "https://ai.google.dev/gemini-api/docs/image-generation",
@@ -108,15 +143,15 @@
           "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image",
           "https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image"
         ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
       },
       {
         "id": "current-image-feature-support",
-        "claim": "The editing, continuation, thinking, search-grounding, image-search, and video-input capability fields for the three current image models match Google's documentation on the retrieval date, subject to the catalog's explicit conflict policies.",
+        "claim": "The editing, continuation, thinking, search-grounding, image-search, and video-input capability fields for the four routed image models match Google's documentation on the retrieval date, subject to the catalog's explicit conflict policies.",
         "evidence_type": "official_documentation",
         "source_urls": [
           "https://ai.google.dev/gemini-api/docs/image-generation",
@@ -127,48 +162,33 @@
           "https://ai.google.dev/gemini-api/docs/interactions-overview",
           "https://ai.google.dev/gemini-api/docs/changelog"
         ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
       },
       {
         "id": "current-image-api-contracts",
-        "claim": "The Interactions and generateContent endpoint selections, accepted model routing, and typed image response-format values encoded in the catalog match Google's API references and model documentation on the retrieval date, subject to the catalog's explicit MIME conflict policy.",
+        "claim": "Google's Interactions model enum lists Nano Banana 2.1, Pro, Flash, and Lite. Banana sends Nano Banana 2.1, Pro, and the deprecated Flash route to Interactions and keeps Lite on generateContent. Google's generateContent reference shows the v1beta path; Banana keeps the v1 path that the redacted Lite probe exercised. Typed image response-format values match the references, subject to the catalog's explicit MIME conflict policy.",
         "evidence_type": "official_documentation",
         "source_urls": [
           "https://ai.google.dev/api/interactions-api",
           "https://ai.google.dev/api/generate-content",
+          "https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1",
           "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite-image",
           "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image",
           "https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image"
         ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
-        "evidence_digest": {"sha256": null, "status": "not_captured"},
-        "independently_auditable_from_package": false,
-        "current_source_recheck_possible": true
-      },
-      {
-        "id": "compatibility-image-contract",
-        "claim": "Gemini 2.5 Flash Image remains a deprecated generateContent compatibility route with 1K image output, documented editing support, no thinking or search grounding, and guidance that it works best with up to three input images.",
-        "evidence_type": "official_documentation",
-        "source_urls": [
-          "https://ai.google.dev/gemini-api/docs/image-generation",
-          "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-image",
-          "https://ai.google.dev/gemini-api/docs/deprecations",
-          "https://ai.google.dev/api/generate-content"
-        ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-12",
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
       },
       {
         "id": "interactions-png-rejection-probe",
-        "claim": "A local redacted Interactions probe using gemini-3-pro-image reportedly rejected image/png and named image/jpeg as the supported value. It did not directly test gemini-3.1-flash-image.",
+        "claim": "A local redacted Interactions probe using gemini-3-pro-image reportedly rejected image/png and named image/jpeg as the supported value. It did not directly test gemini-3.1-flash-image or gemini-nano-banana-2.1. Stale: not re-run since 2026-08-28.",
         "evidence_type": "reported_redacted_live_probe",
         "source_urls": ["https://ai.google.dev/api/interactions-api"],
         "retrieved_on": "2026-08-28",
@@ -179,7 +199,7 @@
       },
       {
         "id": "flash-lite-jpeg-probe",
-        "claim": "A local redacted Flash Lite probe reportedly accepted typed JPEG, 1:1, and 1K enums and returned a 1024 by 1024 JPEG.",
+        "claim": "A local redacted Flash Lite probe reportedly accepted typed JPEG, 1:1, and 1K enums and returned a 1024 by 1024 JPEG. Stale: not re-run since 2026-08-28.",
         "evidence_type": "reported_redacted_live_probe",
         "source_urls": ["https://ai.google.dev/api/generate-content"],
         "retrieved_on": "2026-08-28",
@@ -190,7 +210,7 @@
       },
       {
         "id": "lite-video-documentation-conflict",
-        "claim": "Current Google sources disagree on Flash Lite video-to-image support, so Banana rejects Lite video as a conservative policy.",
+        "claim": "Google's Flash Lite model page and image-generation guide now list video-to-image input for Gemini 3.1 Flash Lite Image, resolving the earlier documentation conflict. Banana has not validated its generateContent video path, so it keeps rejecting Lite video as a conservative policy.",
         "evidence_type": "official_documentation",
         "source_urls": [
           "https://ai.google.dev/gemini-api/docs/image-generation",
@@ -198,8 +218,8 @@
           "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite-image",
           "https://ai.google.dev/gemini-api/docs/changelog"
         ],
-        "retrieved_on": "2026-08-29",
-        "refresh_due": "2026-09-28",
+        "retrieved_on": "2026-10-20",
+        "refresh_due": "2026-11-19",
         "evidence_digest": {"sha256": null, "status": "not_captured"},
         "independently_auditable_from_package": false,
         "current_source_recheck_possible": true
@@ -208,9 +228,16 @@
   },
   "catalog_field_provenance": {
     "model_evidence_groups": {
-      "identity_and_status": ["display_name", "status", "shutdown_date"],
+      "identity_and_status": ["display_name", "status", "shutdown_date_announced"],
       "api_surface_and_output_format": ["api_surface", "output_mime_types", "default_output_mime_type"],
-      "formats_and_reference_limits": ["image_sizes", "default_image_size", "aspect_ratios", "reference_limits.provider_hard_total", "reference_limits.provider_documented_roles", "reference_limits.provider_guidance"],
+      "formats_and_reference_limits": [
+        "image_sizes",
+        "default_image_size",
+        "aspect_ratios",
+        "reference_limits.provider_hard_total",
+        "reference_limits.provider_documented_roles",
+        "reference_limits.provider_guidance"
+      ],
       "features": ["features"],
       "pricing": ["pricing_usd"]
     },
@@ -228,9 +255,9 @@
   "api_profiles": {
     "interactions": {
       "url": "https://generativelanguage.googleapis.com/v1beta/interactions",
-      "supported_models": ["gemini-3.1-flash-image", "gemini-3-pro-image"],
+      "supported_models": ["gemini-nano-banana-2.1", "gemini-3-pro-image", "gemini-3.1-flash-image"],
       "evidence_claim_ids": {
-        "url_and_supported_models": ["current-image-api-contracts"],
+        "url_and_supported_models": ["current-image-api-contracts", "nano-banana-2-1-contract"],
         "output_mime_policy": ["interactions-output-mime-documentation-conflict", "interactions-png-rejection-probe"]
       },
       "reported_live_probe": {
@@ -246,14 +273,14 @@
       "output_mime_documentation": {
         "png_conflict": true,
         "reported_probe_on": "2026-08-28",
-        "note": "Google's current Interactions API reference lists only image/jpeg, while the current image-generation guide shows explicit image/png and image/jpeg REST requests. A redacted local probe using gemini-3-pro-image was reported on 2026-08-28 as rejecting image/png and naming image/jpeg as the supported value; no durable response digest is packaged, and gemini-3.1-flash-image was not directly probed. Banana therefore restricts every Interactions route to image/jpeg as a conservative API-surface policy until both provider behavior and documentation support PNG."
+        "note": "Google's current Interactions API reference lists only image/jpeg, while the current image-generation guide shows explicit image/png and image/jpeg REST requests. A redacted local probe using gemini-3-pro-image was reported on 2026-08-28 as rejecting image/png and naming image/jpeg as the supported value; no durable response digest is packaged, and neither gemini-3.1-flash-image nor gemini-nano-banana-2.1 was directly probed. Banana therefore restricts every Interactions route to image/jpeg as a conservative API-surface policy until both provider behavior and documentation support PNG."
       }
     },
     "generate_content": {
       "url_template": "https://generativelanguage.googleapis.com/v1/models/{model}:generateContent",
-      "supported_models": ["gemini-3.1-flash-lite-image", "gemini-2.5-flash-image"],
+      "supported_models": ["gemini-3.1-flash-lite-image"],
       "evidence_claim_ids": {
-        "url_and_supported_models": ["current-image-api-contracts", "compatibility-image-contract"],
+        "url_and_supported_models": ["current-image-api-contracts"],
         "wire_values": ["current-image-api-contracts", "generate-content-jpeg-enum", "flash-lite-jpeg-probe"]
       },
       "reported_live_probe": {
@@ -267,11 +294,7 @@
           "aspectRatio": "ASPECT_RATIO_ONE_BY_ONE",
           "imageSize": "IMAGE_SIZE_ONE_K"
         },
-        "response": {
-          "mime_type": "image/jpeg",
-          "width": 1024,
-          "height": 1024
-        }
+        "response": {"mime_type": "image/jpeg", "width": 1024, "height": 1024}
       },
       "wire_values": {
         "aspect_ratio": {
@@ -296,9 +319,7 @@
           "2K": "IMAGE_SIZE_TWO_K",
           "4K": "IMAGE_SIZE_FOUR_K"
         },
-        "output_mime_type": {
-          "image/jpeg": "IMAGE_JPEG"
-        }
+        "output_mime_type": {"image/jpeg": "IMAGE_JPEG"}
       },
       "output_mime_documentation": {
         "png_conflict": true,
@@ -320,15 +341,15 @@
       "interactions_retention_setting_client_inspectable": "interactions-paid-retention"
     }
   },
-  "default_model": "gemini-3.1-flash-image",
+  "default_model": "gemini-nano-banana-2.1",
   "portfolio_limit": 9,
   "sources": [
     "https://ai.google.dev/gemini-api/docs/image-generation",
     "https://ai.google.dev/gemini-api/docs/generate-content/image-generation",
+    "https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1",
     "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite-image",
     "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-image",
     "https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image",
-    "https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-image",
     "https://ai.google.dev/gemini-api/docs/pricing",
     "https://ai.google.dev/gemini-api/docs/billing#spend-caps",
     "https://ai.google.dev/gemini-api/docs/changelog",
@@ -370,14 +391,10 @@
         "image_search": false,
         "video_input": false,
         "provider_video_input_documented": true,
-        "video_input_policy": "documentation_conflict_rejected",
+        "video_input_policy": "client_path_not_validated",
         "video_input_documentation": {
-          "provider_documentation_conflict": true,
-          "legacy_generate_content_guide": "flash_and_lite",
-          "modern_image_guide": "flash_only",
-          "current_lite_model_page": "flash_only",
-          "may_28_changelog": "flash_only",
-          "note": "Google's legacy generateContent image guide says Gemini 3.1 Flash Lite Image accepts video-to-image input. Google's modern image-generation guide, current Lite model page and limitations, and 2026-05-28 changelog describe video-to-image as Gemini 3.1 Flash Image only. Banana rejects Lite video until Google resolves this provider documentation conflict."
+          "provider_documentation_conflict": false,
+          "note": "Google's Lite model page and image-generation guide list video-to-image input for Gemini 3.1 Flash Lite Image. Banana has not validated its generateContent video request shape, so it rejects Lite video and routes video-derived images to Nano Banana 2.1."
         }
       },
       "reference_limits": {
@@ -393,30 +410,49 @@
       },
       "evidence_claim_ids": {
         "identity_and_status": ["current-image-model-routes"],
-        "api_surface_and_output_format": ["current-image-api-contracts", "generate-content-jpeg-enum", "flash-lite-jpeg-probe"],
+        "api_surface_and_output_format": [
+          "current-image-api-contracts",
+          "generate-content-jpeg-enum",
+          "flash-lite-jpeg-probe"
+        ],
         "formats_and_reference_limits": ["current-image-formats-and-reference-limits"],
         "features": ["current-image-feature-support", "lite-video-documentation-conflict"],
         "pricing": ["current-image-output-pricing"]
       }
     },
-    "gemini-3.1-flash-image": {
-      "display_name": "Nano Banana 2",
+    "gemini-nano-banana-2.1": {
+      "display_name": "Nano Banana 2.1",
       "status": "ga",
       "route": "default general-purpose generation and editing",
       "api_surface": "interactions",
-      "image_sizes": ["512", "1K", "2K", "4K"],
+      "image_sizes": ["1K", "2K", "4K"],
       "default_image_size": "1K",
       "output_mime_types": ["image/jpeg"],
       "default_output_mime_type": "image/jpeg",
-      "aspect_ratios": ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"],
+      "aspect_ratios": [
+        "1:1",
+        "1:4",
+        "1:8",
+        "2:3",
+        "3:2",
+        "3:4",
+        "4:1",
+        "4:3",
+        "4:5",
+        "5:4",
+        "8:1",
+        "9:16",
+        "16:9",
+        "21:9"
+      ],
       "features": {
         "editing": true,
         "iterative_editing": true,
         "server_managed_continuation": true,
         "configurable_image_size": true,
         "thinking": true,
-        "thinking_levels": ["minimal", "high"],
-        "thinking_default": "minimal",
+        "thinking_levels": ["minimal", "medium", "high"],
+        "thinking_default": "medium",
         "web_search": true,
         "image_search": true,
         "video_input": true,
@@ -431,14 +467,18 @@
         "banana_policy_by_role": {"objects": 10, "characters": 4, "styles": 0}
       },
       "pricing_usd": {
-        "standard": {"512": 0.045, "1K": 0.067, "2K": 0.101, "4K": 0.151},
-        "batch": {"512": 0.022, "1K": 0.034, "2K": 0.05, "4K": 0.076}
+        "standard": {"1K": 0.0336, "2K": 0.0504, "4K": 0.113},
+        "batch": {"1K": 0.0168, "2K": 0.0252, "4K": 0.0567}
       },
       "evidence_claim_ids": {
-        "identity_and_status": ["current-image-model-routes"],
-        "api_surface_and_output_format": ["current-image-api-contracts", "interactions-output-mime-documentation-conflict"],
-        "formats_and_reference_limits": ["current-image-formats-and-reference-limits"],
-        "features": ["current-image-feature-support"],
+        "identity_and_status": ["current-image-model-routes", "nano-banana-2-1-contract"],
+        "api_surface_and_output_format": [
+          "current-image-api-contracts",
+          "nano-banana-2-1-contract",
+          "interactions-output-mime-documentation-conflict"
+        ],
+        "formats_and_reference_limits": ["nano-banana-2-1-contract"],
+        "features": ["nano-banana-2-1-contract", "nano-banana-2-1-video-input"],
         "pricing": ["current-image-output-pricing"]
       }
     },
@@ -479,58 +519,81 @@
       },
       "evidence_claim_ids": {
         "identity_and_status": ["current-image-model-routes"],
-        "api_surface_and_output_format": ["current-image-api-contracts", "interactions-output-mime-documentation-conflict", "interactions-png-rejection-probe"],
+        "api_surface_and_output_format": [
+          "current-image-api-contracts",
+          "interactions-output-mime-documentation-conflict",
+          "interactions-png-rejection-probe"
+        ],
         "formats_and_reference_limits": ["current-image-formats-and-reference-limits"],
         "features": ["current-image-feature-support"],
         "pricing": ["current-image-output-pricing"]
       }
     },
-    "gemini-2.5-flash-image": {
-      "display_name": "Nano Banana",
+    "gemini-3.1-flash-image": {
+      "display_name": "Nano Banana 2",
       "status": "deprecated",
-      "shutdown_date": "2026-10-02",
-      "route": "compatibility only; prefer Nano Banana 2 Lite for new 1K work",
-      "api_surface": "generate_content",
-      "image_sizes": ["1K"],
+      "route": "deprecated; use only for 512 output, otherwise prefer Nano Banana 2.1",
+      "api_surface": "interactions",
+      "image_sizes": ["512", "1K", "2K", "4K"],
       "default_image_size": "1K",
       "output_mime_types": ["image/jpeg"],
       "default_output_mime_type": "image/jpeg",
-      "aspect_ratios": ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"],
+      "aspect_ratios": [
+        "1:1",
+        "1:4",
+        "1:8",
+        "2:3",
+        "3:2",
+        "3:4",
+        "4:1",
+        "4:3",
+        "4:5",
+        "5:4",
+        "8:1",
+        "9:16",
+        "16:9",
+        "21:9"
+      ],
       "features": {
         "editing": true,
         "iterative_editing": true,
-        "server_managed_continuation": false,
-        "configurable_image_size": false,
-        "thinking": false,
-        "thinking_levels": [],
-        "thinking_default": "not_applicable",
-        "web_search": false,
-        "image_search": false,
-        "video_input": false,
-        "provider_video_input_documented": false,
-        "video_input_policy": "provider_not_documented"
+        "server_managed_continuation": true,
+        "configurable_image_size": true,
+        "thinking": true,
+        "thinking_levels": ["minimal", "high"],
+        "thinking_default": "minimal",
+        "web_search": true,
+        "image_search": true,
+        "video_input": true,
+        "provider_video_input_documented": true,
+        "video_input_policy": "enabled"
       },
       "reference_limits": {
-        "provider_hard_total": null,
-        "provider_documented_roles": {"objects": null, "characters": null, "styles": null},
-        "provider_guidance": "Google says this model works best with up to 3 input images; this is provider guidance, not a documented hard limit.",
-        "banana_policy_total": 3,
-        "banana_policy_by_role": {"objects": 3, "characters": 0, "styles": 0}
+        "provider_hard_total": 14,
+        "provider_documented_roles": {"objects": 10, "characters": 4, "styles": null},
+        "provider_guidance": "Google documents up to 14 total references, including up to 10 object images and up to 4 character images.",
+        "banana_policy_total": 14,
+        "banana_policy_by_role": {"objects": 10, "characters": 4, "styles": 0}
       },
       "pricing_usd": {
-        "standard": {"1K": 0.039},
-        "batch": {"1K": 0.0195}
+        "standard": {"512": 0.045, "1K": 0.067, "2K": 0.101, "4K": 0.151},
+        "batch": {"512": 0.022, "1K": 0.034, "2K": 0.05, "4K": 0.076}
       },
       "evidence_claim_ids": {
-        "identity_and_status": ["gemini-2-5-image-shutdown", "compatibility-image-contract"],
-        "api_surface_and_output_format": ["compatibility-image-contract", "generate-content-jpeg-enum"],
-        "formats_and_reference_limits": ["compatibility-image-contract"],
-        "features": ["compatibility-image-contract"],
+        "identity_and_status": ["current-image-model-routes"],
+        "api_surface_and_output_format": [
+          "current-image-api-contracts",
+          "interactions-output-mime-documentation-conflict"
+        ],
+        "formats_and_reference_limits": ["current-image-formats-and-reference-limits"],
+        "features": ["current-image-feature-support"],
         "pricing": ["current-image-output-pricing"]
-      }
+      },
+      "shutdown_date_announced": false
     }
   },
   "retired_model_ids": [
+    "gemini-2.5-flash-image",
     "gemini-3.1-flash-image-preview",
     "gemini-3-pro-image-preview",
     "gemini-2.5-flash-image-preview",

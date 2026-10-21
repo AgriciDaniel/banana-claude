@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-20
+
+[Read the version 3.1 release notes](.github/releases/v3.1.0.md).
+
+### Breaking
+
+- `512` is no longer available on the default model. Requests for 512 without
+  a model now fail before any provider call and name `gemini-3.1-flash-image`
+  as the route that supports it.
+- `gemini-2.5-flash-image` is no longer routed. Plans and saved presets that
+  name it fail with `retired_model` and point to the current default.
+
+### Changed
+
+- Made `gemini-nano-banana-2.1` (Nano Banana 2.1, GA 2026-10-06) the default
+  Interactions route with 1K, 2K, and 4K output, `minimal`, `medium`, or
+  `high` thinking (default `medium`), Web and Image Search, video-derived
+  images, and up to 14 references. Its nominal 1K estimate is $0.0336, half
+  the previous default. Thinking tokens are billed on top of that.
+- Marked `gemini-3.1-flash-image` deprecated, following Google's 2026-10-06
+  deprecation without an announced shutdown date. It stays routable only for
+  512 output.
+- Rewrote prompt guidance for current models: narrative, director-style scene
+  descriptions with labeled lines only for hard constraints, positive
+  phrasing, numbered reference wording that matches the runtime labels, a
+  continuation-turn section, and stronger text-rendering guidance. Ratio and
+  size stay out of prompt text because they are request parameters.
+- Tightened `SKILL.md`, sharpened its trigger description, and defined the
+  advise route.
+- The approval summary now also shows the model status, thinking level,
+  per-image rate, and any video URL with its paid-attempt warning.
+- Rechecked the model catalog's documentation claims against Google on
+  2026-10-20. The two 2026-08-28 probes and the generateContent JPEG enum
+  claim, whose reference section could not be read in full, are labeled stale.
+
+### Fixed
+
+- Token usage now keeps Google's documented field names and per-modality
+  breakdowns for both APIs. Before, only the grand total survived on
+  Interactions routes because Banana looked for undocumented field names.
+  Grounding tool counts and service tier are not recorded, and Banana does not
+  convert tokens into a price.
+- Legacy 1.4.1 presets that used 512 migrate to the deprecated Flash route
+  instead of failing.
+- A 3.0.0 cost-ledger attempt for a retired model can still be reconciled.
+- The visual critic no longer claims to compute SHA-256 with a read-only tool;
+  it confirms the supplied hash matches the plan and sidecars.
+- The visual architect no longer reads repository paths that do not exist in
+  an installed plugin, and returns `BLOCKED` with one question instead of
+  asking mid-run.
+- Post-processing examples now match Banana's JPEG output and warn that JPEG
+  has no alpha channel.
+- Removed a stray placeholder sentence from the README.
+
+### Dependencies
+
+- Updated the development-only pins to Ruff 0.17.0 and Mypy 2.4.0.
+
+### Documentation
+
+- Stated that native Windows generation is unsupported and that WSL works.
+
 ## [3.0.0] - 2026-08-30
 
 [Read the version 3 release highlights](.github/releases/v3.0.0.md).
@@ -480,4 +542,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.4.1]: https://github.com/AgriciDaniel/banana-claude/releases/tag/v1.4.1
 [2.1.0]: https://github.com/AgriciDaniel/banana-claude/releases/tag/v2.1.0
 [3.0.0]: https://github.com/AgriciDaniel/banana-claude/compare/v1.4.1...v3.0.0
-[Unreleased]: https://github.com/AgriciDaniel/banana-claude/compare/v3.0.0...HEAD
+[3.1.0]: https://github.com/AgriciDaniel/banana-claude/compare/v3.0.0...v3.1.0
+[Unreleased]: https://github.com/AgriciDaniel/banana-claude/compare/v3.1.0...HEAD

@@ -53,10 +53,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--prompt", required=True, help="Exact edit delta and preservation instructions"
     )
-    parser.add_argument("--model", default="gemini-3.1-flash-image")
+    parser.add_argument("--model", default="gemini-nano-banana-2.1")
     parser.add_argument("--aspect-ratio", default="1:1")
     parser.add_argument("--resolution", default="auto")
-    parser.add_argument("--thinking", choices=["minimal", "high"])
+    parser.add_argument("--thinking", choices=["minimal", "medium", "high"])
     parser.add_argument("--web-search", action="store_true")
     parser.add_argument("--image-search", action="store_true")
     parser.add_argument("--store", action="store_true")

@@ -1,6 +1,7 @@
 # Cost planning and private ledger
 
-Verified 2026-08-29 against Google's primary documentation:
+Verified 2026-10-20 against Google's primary documentation (see the claim
+ledger in models.json). Sources:
 
 - pricing: https://ai.google.dev/gemini-api/docs/pricing
 - billing and spend caps: https://ai.google.dev/gemini-api/docs/billing#spend-caps
@@ -16,14 +17,21 @@ before a release, procurement decision, or durable budget commitment.
 
 | Model | Size | Standard | Google Batch |
 |---|---:|---:|---:|
+| gemini-nano-banana-2.1 | 1K | $0.0336 | $0.0168 |
+| gemini-nano-banana-2.1 | 2K | $0.0504 | $0.0252 |
+| gemini-nano-banana-2.1 | 4K | $0.113 | $0.0567 |
 | gemini-3.1-flash-lite-image | 1K | $0.0336 | $0.0168 |
-| gemini-3.1-flash-image | 512 | $0.045 | $0.022 |
-| gemini-3.1-flash-image | 1K | $0.067 | $0.034 |
-| gemini-3.1-flash-image | 2K | $0.101 | $0.050 |
-| gemini-3.1-flash-image | 4K | $0.151 | $0.076 |
+| gemini-3.1-flash-image (deprecated) | 512 | $0.045 | $0.022 |
+| gemini-3.1-flash-image (deprecated) | 1K | $0.067 | $0.034 |
+| gemini-3.1-flash-image (deprecated) | 2K | $0.101 | $0.050 |
+| gemini-3.1-flash-image (deprecated) | 4K | $0.151 | $0.076 |
 | gemini-3-pro-image | 1K or 2K | $0.134 | $0.067 |
 | gemini-3-pro-image | 4K | $0.24 | $0.12 |
-| gemini-2.5-flash-image | About 1K | $0.039 | $0.0195 |
+
+Google bills image output by tokens. Nano Banana 2.1 output costs $30 per
+million tokens ($15 on Batch), and a 4K image is 3,780 tokens. Thinking tokens
+are billed separately as text output, so a real Nano Banana 2.1 call at the
+default `medium` level usually costs more than the image-output rate alone.
 
 Each Banana plan uses estimate_basis: nominal_one_output. The displayed
 image_output_rate_usd is the current nominal rate for one output at the chosen
@@ -101,7 +109,7 @@ create an API key, but image calls require a billing-enabled project.
 
 ## Storage and retention disclosure
 
-The 2026-08-29 catalog records these provider rules:
+The catalog records these provider rules, verified 2026-10-20:
 
 - Banana explicitly sends store: false for one-shot Interactions requests;
 - a stored paid Interactions request defaults to 55 days, with project
@@ -159,10 +167,10 @@ was submitted and verified.
 ## Working-directory-independent ledger commands
 
     python3 "$CLAUDE_SKILL_DIR/scripts/cost_tracker.py" estimate \
-      --model gemini-3.1-flash-image --resolution 2K --count 3
+      --model gemini-nano-banana-2.1 --resolution 2K --count 3
 
     python3 "$CLAUDE_SKILL_DIR/scripts/cost_tracker.py" log \
-      --model gemini-3.1-flash-image --resolution 2K \
+      --model gemini-nano-banana-2.1 --resolution 2K \
       --count 1 --label "approved homepage concept"
 
     python3 "$CLAUDE_SKILL_DIR/scripts/cost_tracker.py" today

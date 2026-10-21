@@ -45,23 +45,52 @@ BIDI_CONTROL_CODEPOINTS = frozenset(
     {0x061C, 0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x2066, 0x206A)}
 )
 TRANSIENT_HTTP_CODES = {408, 429, 500, 502, 503, 504}
-SUPPORTED_THINKING_LEVELS = {"minimal", "high"}
-USAGE_TOKEN_KEYS = frozenset(
+SUPPORTED_THINKING_LEVELS = {"minimal", "medium", "high"}
+# Usage field names follow Google's Interactions `Usage` and generateContent
+# `UsageMetadata` references exactly, so persisted keys map 1:1 to the docs.
+INTERACTIONS_USAGE_COUNT_KEYS = frozenset(
     {
-        "input_tokens",
-        "output_tokens",
+        "total_input_tokens",
+        "total_output_tokens",
+        "total_thought_tokens",
+        "total_cached_tokens",
+        "total_tool_use_tokens",
         "total_tokens",
-        "cached_input_tokens",
-        "thoughts_tokens",
-        "tool_use_prompt_tokens",
-        "promptTokenCount",
-        "candidatesTokenCount",
-        "totalTokenCount",
-        "cachedContentTokenCount",
-        "thoughtsTokenCount",
-        "toolUsePromptTokenCount",
     }
 )
+INTERACTIONS_USAGE_MODALITY_KEYS = frozenset(
+    {
+        "input_tokens_by_modality",
+        "output_tokens_by_modality",
+        "cached_tokens_by_modality",
+        "tool_use_tokens_by_modality",
+    }
+)
+INTERACTIONS_USAGE_MODALITIES = frozenset(
+    {"text", "image", "audio", "video", "document"}
+)
+GENERATE_CONTENT_USAGE_COUNT_KEYS = frozenset(
+    {
+        "promptTokenCount",
+        "candidatesTokenCount",
+        "thoughtsTokenCount",
+        "cachedContentTokenCount",
+        "toolUsePromptTokenCount",
+        "totalTokenCount",
+    }
+)
+GENERATE_CONTENT_USAGE_MODALITY_KEYS = frozenset(
+    {
+        "promptTokensDetails",
+        "candidatesTokensDetails",
+        "cacheTokensDetails",
+        "toolUsePromptTokensDetails",
+    }
+)
+GENERATE_CONTENT_USAGE_MODALITIES = frozenset(
+    {"TEXT", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT", "MODALITY_UNSPECIFIED"}
+)
+MAX_USAGE_MODALITY_ENTRIES = 8
 MAX_PROVIDER_TOKEN_COUNT = 2**63 - 1
 PROVIDER_ERROR_STATUSES = frozenset(
     {
@@ -339,12 +368,27 @@ def load_catalog() -> dict[str, Any]:
     return cast(dict[str, Any], catalog)
 
 
+def retired_model_ids() -> frozenset[str]:
+    """Return catalog model IDs that Banana no longer routes."""
+    retired = load_catalog().get("retired_model_ids", [])
+    if not isinstance(retired, list):
+        return frozenset()
+    return frozenset(item for item in retired if isinstance(item, str))
+
+
 def get_model(model: str | None = None) -> tuple[str, dict[str, Any]]:
     catalog = load_catalog()
     selected = model or catalog["default_model"]
     info = catalog["models"].get(selected)
     if not info:
         available = ", ".join(sorted(catalog["models"]))
+        if selected in retired_model_ids():
+            raise BananaError(
+                "retired_model",
+                f"Model '{selected}' was retired and Banana no longer routes it. "
+                f"Use the current default, {catalog['default_model']}, or another "
+                f"available model: {available}",
+            )
         raise BananaError(
             "unsupported_model",
             f"Unsupported model. Available: {available}",
@@ -352,17 +396,36 @@ def get_model(model: str | None = None) -> tuple[str, dict[str, Any]]:
     return selected, info
 
 
+def canonical_image_size(value: str) -> str:
+    """Map accepted image-size aliases to the catalog spelling."""
+    aliases = {"0.5k": "512", "512px": "512", "1k": "1K", "2k": "2K", "4k": "4K"}
+    return aliases.get(value.strip().lower(), value.strip())
+
+
+def models_supporting_image_size(value: str) -> list[str]:
+    """Return routed catalog model IDs, in catalog order, that accept one size."""
+    normalized = canonical_image_size(value)
+    return [
+        model_id
+        for model_id, info in load_catalog()["models"].items()
+        if normalized in info.get("image_sizes", [])
+    ]
+
+
 def normalize_image_size(value: str | None, model_info: dict[str, Any]) -> str:
     if not value or value.lower() == "auto":
         return str(model_info["default_image_size"])
-    aliases = {"0.5k": "512", "512px": "512", "1k": "1K", "2k": "2K", "4k": "4K"}
-    normalized = aliases.get(value.strip().lower(), value.strip())
+    normalized = canonical_image_size(value)
     if normalized not in model_info["image_sizes"]:
         supported = ", ".join(model_info["image_sizes"])
-        raise BananaError(
-            "unsupported_image_size",
-            f"Image size is not supported by this model. Use: {supported}",
-        )
+        message = f"Image size is not supported by this model. Use: {supported}"
+        supporting_models = models_supporting_image_size(normalized)
+        if supporting_models:
+            message += (
+                f". Catalog models that support {normalized}: "
+                f"{', '.join(supporting_models)}"
+            )
+        raise BananaError("unsupported_image_size", message)
     return normalized
 
 
@@ -466,7 +529,6 @@ def resolve_provider_response_format(
     *,
     api_surface: str,
     api_profile: dict[str, Any],
-    model_info: dict[str, Any],
     aspect_ratio: str,
     image_size: str,
     output_mime_type: str,
@@ -499,9 +561,8 @@ def resolve_provider_response_format(
     image_format = {
         "mimeType": mapped("output_mime_type", output_mime_type),
         "aspectRatio": mapped("aspect_ratio", aspect_ratio),
+        "imageSize": mapped("image_size", image_size),
     }
-    if model_info["features"].get("configurable_image_size"):
-        image_format["imageSize"] = mapped("image_size", image_size)
     return {"image": image_format}
 
 
@@ -1311,7 +1372,6 @@ def build_plan(
     provider_response_format = resolve_provider_response_format(
         api_surface=api_surface,
         api_profile=api_profile,
-        model_info=info,
         aspect_ratio=ratio,
         image_size=size,
         output_mime_type=checked_mime_type,
@@ -1656,10 +1716,14 @@ def _approval_summary(plan: dict[str, Any]) -> dict[str, Any]:
         "brief_source": plan["brief_source"],
         "visual_brief": plan["visual_brief"],
         "model": plan["model"],
+        "model_status": plan["model_status"],
         "image_size": plan["image_size"],
         "aspect_ratio": plan["aspect_ratio"],
         "output_mime_type": plan["output_mime_type"],
+        "thinking_level": plan["thinking_level"],
+        "thinking_behavior": plan["thinking_behavior"],
         "provider_attempt_count": plan["provider_attempt_count"],
+        "image_output_rate_usd": plan["image_output_rate_usd"],
         "estimated_image_output_usd": plan["estimated_image_output_usd"],
         "estimate_basis": plan["estimate_basis"],
         "estimate_is_invoice_cap": plan["estimate_is_invoice_cap"],
@@ -1683,6 +1747,8 @@ def _approval_summary(plan: dict[str, Any]) -> dict[str, Any]:
             "provider_storage_setting_inspectable"
         ],
         "provider_storage_warning": plan["provider_storage_warning"],
+        "video_url": plan["video_url"],
+        "video_url_paid_attempt_warning": plan["video_url_paid_attempt_warning"],
         "output_directory": plan["output_directory"],
         "references": [
             {
@@ -1843,15 +1909,53 @@ def _provider_identifier_digest(value: Any) -> str | None:
     return hashlib.sha256(candidate.encode("utf-8")).hexdigest()
 
 
-def _safe_usage(value: Any) -> dict[str, int]:
-    """Keep only documented scalar token counts from provider metadata."""
+def _safe_token_count(value: Any) -> int | None:
+    if type(value) is int and 0 <= value <= MAX_PROVIDER_TOKEN_COUNT:
+        return value
+    return None
+
+
+def _safe_usage(
+    value: Any,
+    *,
+    count_keys: frozenset[str],
+    modality_keys: frozenset[str],
+    allowed_modalities: frozenset[str],
+    count_field: str,
+) -> dict[str, int | list[dict[str, str | int]]]:
+    """Keep only documented token counts and per-modality token lists.
+
+    A modality outside the allowlist is recorded as "unknown" so its tokens
+    are not silently lost; every other provider field is dropped.
+    """
     if not isinstance(value, dict):
         return {}
-    usage: dict[str, int] = {}
-    for key in USAGE_TOKEN_KEYS:
-        count = value.get(key)
-        if type(count) is int and 0 <= count <= MAX_PROVIDER_TOKEN_COUNT:
+    usage: dict[str, int | list[dict[str, str | int]]] = {}
+    for key in sorted(count_keys):
+        count = _safe_token_count(value.get(key))
+        if count is not None:
             usage[key] = count
+    canonical_modalities = {item.lower(): item for item in allowed_modalities}
+    for key in sorted(modality_keys):
+        entries = value.get(key)
+        if not isinstance(entries, list):
+            continue
+        safe_entries: list[dict[str, str | int]] = []
+        for entry in entries[:MAX_USAGE_MODALITY_ENTRIES]:
+            if not isinstance(entry, dict):
+                continue
+            count = _safe_token_count(entry.get(count_field))
+            if count is None:
+                continue
+            modality = entry.get("modality")
+            safe_modality = (
+                canonical_modalities.get(modality.strip().lower(), "unknown")
+                if isinstance(modality, str)
+                else "unknown"
+            )
+            safe_entries.append({"modality": safe_modality, count_field: count})
+        if safe_entries:
+            usage[key] = safe_entries
     return usage
 
 
@@ -1988,7 +2092,7 @@ def _call_json_api(
             headers={
                 "Content-Type": "application/json",
                 "x-goog-api-key": key,
-                "User-Agent": "banana-claude/3.0.0",
+                "User-Agent": "banana-claude/3.1.0",
             },
             method="POST",
         )
@@ -2206,7 +2310,13 @@ def extract_interaction(response: dict[str, Any]) -> dict[str, Any]:
         "text": "\n".join(texts).strip(),
         "citations": citations,
         "search_suggestions": list(dict.fromkeys(search_suggestions)),
-        "usage": _safe_usage(response.get("usage")),
+        "usage": _safe_usage(
+            response.get("usage"),
+            count_keys=INTERACTIONS_USAGE_COUNT_KEYS,
+            modality_keys=INTERACTIONS_USAGE_MODALITY_KEYS,
+            allowed_modalities=INTERACTIONS_USAGE_MODALITIES,
+            count_field="tokens",
+        ),
     }
 
 
@@ -2345,7 +2455,11 @@ def extract_generate_content(response: dict[str, Any], *, model: str) -> dict[st
         "citations": [],
         "search_suggestions": [],
         "usage": _safe_usage(
-            response.get("usageMetadata") or response.get("usage_metadata")
+            response.get("usageMetadata") or response.get("usage_metadata"),
+            count_keys=GENERATE_CONTENT_USAGE_COUNT_KEYS,
+            modality_keys=GENERATE_CONTENT_USAGE_MODALITY_KEYS,
+            allowed_modalities=GENERATE_CONTENT_USAGE_MODALITIES,
+            count_field="tokenCount",
         ),
     }
 
@@ -3266,59 +3380,6 @@ def _complete_path_file_receipt_matches(
         and stat.S_IMODE(held_after.st_mode) == expected_mode
         and held_after.st_size == len(expected)
         and (held_after.st_dev, held_after.st_ino) == expected_identity
-    )
-
-
-def _error_with_temporary_recovery(
-    error: BananaError,
-    temporary_path: Path,
-    intended_identity: tuple[int, int] | None,
-    *,
-    observed_identity: tuple[int, int] | None,
-    path_is_bound: bool,
-    intended_link_count: int | None,
-) -> BananaError:
-    details = dict(error.details)
-    details.update(
-        {
-            "recovery_required": True,
-            "temporary_path": str(temporary_path),
-            "temporary_path_identity_unknown": observed_identity is None,
-            "temporary_path_requires_identity_check": True,
-        }
-    )
-    if observed_identity is not None:
-        details["temporary_not_deleted"] = True
-        details["temporary_identity"] = {
-            "device": observed_identity[0],
-            "inode": observed_identity[1],
-        }
-        details["retained_artifacts"] = [
-            _recovery_artifact(temporary_path, observed_identity)
-            if path_is_bound
-            else _unlocated_recovery_artifact(
-                observed_identity,
-                last_known_path=temporary_path,
-            )
-        ]
-    if intended_identity is not None:
-        details["intended_artifact"] = {
-            "device": intended_identity[0],
-            "inode": intended_identity[1],
-            "last_known_path": str(temporary_path),
-            "path_binding_verified": observed_identity == intended_identity
-            and path_is_bound,
-            "path_unknown": observed_identity != intended_identity or not path_is_bound,
-            "last_observed_link_count": intended_link_count,
-        }
-        if observed_identity != intended_identity or not path_is_bound:
-            details["intended_artifact_path_unknown"] = True
-    return BananaError(
-        error.code,
-        error.message,
-        retryable=error.retryable,
-        http_status=error.http_status,
-        details=details,
     )
 
 

@@ -149,10 +149,17 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertIs(payload["network_called"], False)
-        self.assertEqual(payload["plan"]["model"], "gemini-3.1-flash-image")
+        self.assertEqual(payload["plan"]["model"], "gemini-nano-banana-2.1")
         self.assertIn("request_fingerprint", payload["plan"])
         self.assertTrue(payload["plan"]["approval_id"].startswith("bap_"))
         self.assertEqual(payload["plan"]["approval_scope"], "single_use")
+        summary = payload["plan"]["approval_summary"]
+        self.assertEqual(summary["model_status"], "ga")
+        self.assertEqual(summary["thinking_behavior"], "medium")
+        self.assertEqual(
+            summary["image_output_rate_usd"], payload["plan"]["image_output_rate_usd"]
+        )
+        self.assertIsNone(summary["video_url"])
 
     def test_generate_accepts_closed_visual_brief_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -611,13 +618,13 @@ class PortfolioTests(unittest.TestCase):
     def test_portfolio_is_bounded_and_deterministic(self) -> None:
         first = build_portfolio_plan(
             prompts=["Direct", "One justified risk"],
-            models=["gemini-3.1-flash-image", "gemini-3-pro-image"],
+            models=["gemini-nano-banana-2.1", "gemini-3-pro-image"],
             aspect_ratio="16:9",
             visual_brief=visual_brief(aspect_ratio="16:9"),
         )
         second = build_portfolio_plan(
             prompts=["Direct", "One justified risk"],
-            models=["gemini-3.1-flash-image", "gemini-3-pro-image"],
+            models=["gemini-nano-banana-2.1", "gemini-3-pro-image"],
             aspect_ratio="16:9",
             visual_brief=visual_brief(aspect_ratio="16:9"),
         )
@@ -637,7 +644,7 @@ class PortfolioTests(unittest.TestCase):
             )
         )
         self.assertTrue(
-            all(item["catalog_verified_on"] == "2026-08-29" for item in public["items"])
+            all(item["catalog_verified_on"] == "2026-10-20" for item in public["items"])
         )
         self.assertTrue(all(item["store"] is False for item in public["items"]))
         self.assertEqual(public["output_mime_type"], "image/jpeg")
@@ -652,8 +659,17 @@ class PortfolioTests(unittest.TestCase):
         self.assertIn("provider_storage_warning", approval_summary)
         self.assertEqual(
             {item["thinking_behavior"] for item in public["items"]},
-            {"minimal", "provider_default_process"},
+            {"medium", "provider_default_process"},
         )
+        self.assertEqual(
+            public["approval_summary"]["model_statuses"],
+            {item["model"]: item["model_status"] for item in public["items"]},
+        )
+        self.assertEqual(
+            public["approval_summary"]["image_output_rates_usd"],
+            {item["model"]: item["image_output_rate_usd"] for item in public["items"]},
+        )
+        self.assertTrue(all("thinking_level" in item for item in public["items"]))
         self.assertTrue(
             all(
                 item["thinking_documentation_conflict"] is False
@@ -666,7 +682,8 @@ class PortfolioTests(unittest.TestCase):
         self.assertTrue(
             all(
                 "gemini-3-pro-image" in item["output_mime_documentation_note"]
-                and "gemini-3.1-flash-image was not directly probed"
+                and "neither gemini-3.1-flash-image nor gemini-nano-banana-2.1 was "
+                "directly probed"
                 in item["output_mime_documentation_note"]
                 and "conservative API-surface policy"
                 in item["output_mime_documentation_note"]
@@ -1062,7 +1079,7 @@ class McpTests(unittest.TestCase):
             }
         )
         assert initialized is not None
-        self.assertEqual(initialized["result"]["serverInfo"]["version"], "3.0.0")
+        self.assertEqual(initialized["result"]["serverInfo"]["version"], "3.1.0")
         listed = handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         assert listed is not None
         self.assertEqual(len(listed["result"]["tools"]), 7)
@@ -1071,8 +1088,14 @@ class McpTests(unittest.TestCase):
             result = call_tool("banana_plan", {"prompt": "A minimal still life"})
         self.assertFalse(result["isError"])
         plan = json.loads(result["content"][0]["text"])
-        self.assertEqual(plan["estimated_image_output_usd"], 0.067)
+        self.assertEqual(plan["estimated_image_output_usd"], 0.0336)
         self.assertTrue(plan["approval_id"].startswith("bap_"))
+        summary = plan["approval_summary"]
+        self.assertEqual(summary["model_status"], plan["model_status"])
+        self.assertEqual(summary["thinking_level"], plan["thinking_level"])
+        self.assertEqual(summary["thinking_behavior"], plan["thinking_behavior"])
+        self.assertEqual(summary["image_output_rate_usd"], 0.0336)
+        self.assertIsNone(summary["video_url_paid_attempt_warning"])
 
     def test_mcp_cost_logging_never_persists_raw_interaction_id(self) -> None:
         raw_identifier = "synthetic-mcp-interaction-id-never-persist"

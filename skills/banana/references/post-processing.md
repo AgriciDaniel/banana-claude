@@ -15,6 +15,12 @@ If changing directory is undesirable, replace every relative input and output
 with an absolute path. Bundled Banana scripts are invoked through
 `$CLAUDE_SKILL_DIR` and do not depend on the current directory.
 
+Banana saves every provider output as JPEG (`.jpg`), with a `.jpg.json`
+sidecar. Examples that read `input.png` accept a PNG or JPEG source; substitute
+the actual file name. A JPEG source has no alpha channel and carries
+compression artifacts, so transparency recipes need a PNG output and closer
+edge inspection.
+
 Check availability before using:
 ```bash
 which magick    # ImageMagick 7 (preferred)
@@ -238,7 +244,7 @@ publishing documentation. Freeze the required pixel canvas, crop behavior,
 safe areas, format, file-size limit, alpha behavior, and color requirements.
 
 After replacing the two task-specific placeholders with integers, this template
-performs a center crop:
+performs a center crop of a PNG or JPEG source:
 
 ```bash
 banana_target_width=REQUIRED_PIXEL_WIDTH
@@ -256,6 +262,10 @@ focal subject, text, logo, or required safe area would be clipped, then inspect
 the delivery-size artifact.
 
 ### Background Removal (Transparency)
+
+These recipes accept a PNG or JPEG source and must write PNG, because JPEG has
+no alpha channel. JPEG compression leaves the background slightly uneven, so a
+JPEG source may need a higher `-fuzz` value; inspect edges before accepting.
 
 ```bash
 # Remove solid white background
@@ -281,7 +291,7 @@ banana_render_new_destination "transparency-trimmed.png" \
 ### Format Conversion
 
 ```bash
-# PNG to WebP (web-optimized, smaller file)
+# PNG or JPEG to WebP (web-optimized, smaller file)
 banana_render_new_destination "converted.webp" \
   magick input.png -quality 85 "__BANANA_RENDER_OUTPUT__"
 
@@ -365,16 +375,18 @@ banana_render_new_destination "rounded.png" \
 ### Batch Processing
 
 ```bash
-# Resize all PNGs in directory
-for f in ~/Documents/banana-claude/*.png; do
-  banana_derived_output="${f%.png}_thumb.png"
+# Resize all Banana JPEG outputs in directory, skipping earlier thumbnails
+for f in ~/Documents/banana-claude/*.jpg; do
+  case "$f" in *_thumb.jpg) continue ;; esac
+  banana_derived_output="${f%.jpg}_thumb.jpg"
   banana_render_new_destination "$banana_derived_output" \
     magick "$f" -resize 800x800 "__BANANA_RENDER_OUTPUT__" || exit 1
 done
 
-# Convert all to WebP
-for f in ~/Documents/banana-claude/*.png; do
-  banana_derived_output="${f%.png}.webp"
+# Convert all Banana JPEG outputs to WebP
+for f in ~/Documents/banana-claude/*.jpg; do
+  case "$f" in *_thumb.jpg) continue ;; esac
+  banana_derived_output="${f%.jpg}.webp"
   banana_render_new_destination "$banana_derived_output" \
     magick "$f" -quality 85 "__BANANA_RENDER_OUTPUT__" || exit 1
 done
@@ -390,7 +402,7 @@ banana_render_new_destination "animation.gif" \
 
 # Create MP4 from image sequence
 banana_render_new_destination "slideshow.mp4" \
-  ffmpeg -framerate 1 -pattern_type glob -i '*.png' \
+  ffmpeg -framerate 1 -pattern_type glob -i '*.jpg' \
     -c:v libx264 -pix_fmt yuv420p "__BANANA_RENDER_OUTPUT__"
 ```
 
@@ -435,6 +447,10 @@ chroma-key route is suitable only for clean, high-contrast subjects:
 
 ### 1. Generate with a solid chroma background
 
+Provider output is JPEG, so the keyed source has no alpha and carries
+compression fringing around the subject. Expect to raise `-fuzz` or the FFmpeg
+similarity value modestly and to apply despill, then inspect edges closely.
+
 For a new asset only, add a chroma-background requirement to the frozen brief.
 Do not append it to a preservation edit when it conflicts with the original
 background or other locks:
@@ -470,8 +486,9 @@ banana_render_new_destination "subject-keyed-ffmpeg.png" \
 
 ### Tips
 
-- `-fuzz 20%` handles slight color variation, but inspect the result before
-  increasing it because a broader tolerance can erase intended colors.
+- `-fuzz 20%` handles slight color variation. JPEG fringing often needs a
+  somewhat higher value, but inspect the result before increasing it because a
+  broader tolerance can erase intended colors.
 - High-contrast edges help extraction but may still produce color spill.
 - FFmpeg can process repeated assets efficiently and includes a despill stage.
 - Always verify edges after conversion. Hair and fur may need manual touchup.

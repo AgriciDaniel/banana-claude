@@ -64,8 +64,9 @@ Important inputs:
 | `model` | Closed catalog model ID |
 | `aspect_ratio` | Must be supported by the selected model |
 | `image_size` | `auto`, `512`, `1K`, `2K`, or `4K`, model-dependent |
+| `thinking_level` | `minimal`, `medium`, or `high` where the model allows it; Lite and Flash accept only `minimal` or `high`; omit for Pro |
 | `references` | Structured local rasters with required `path`, non-sensitive `disclosure_alias`, Banana-side prompt `role`, and semantic `purpose`, plus optional `subject_id`, capped by the selected route's Banana policy and 20 MB total inline. The matching visual-brief reference also requires its closed authority object |
-| `video_url` | HTTPS YouTube watch or short URL with a syntactically valid 11-character ID, Flash Image only. Existence, public status, and Google accessibility are user-asserted and not preflighted |
+| `video_url` | HTTPS YouTube watch or short URL with a syntactically valid 11-character ID, accepted on Nano Banana 2.1 and Flash Image. Existence, public status, and Google accessibility are user-asserted and not preflighted |
 | `previous_interaction_id` | Stored continuation ID |
 | `web_search` / `image_search` | Model-specific grounding |
 | `store` | Interactions retention and continuation; Banana explicitly sends false by default, while Google's provider default is true |
@@ -94,8 +95,10 @@ the recipient, or approval state.
 
 The public response begins with `approval_summary`, the compact decision
 surface. It contains the exact prompt, normalized brief, `brief_sha256`, brief
-source, model and output settings, provider-attempt and nominal-cost fields,
-grounding and storage disclosures, destination, and safe reference aliases. The
+source, model and model status, output settings, thinking level and behavior,
+provider-attempt count, per-image rate and nominal-cost fields, grounding and
+storage disclosures, any video URL with its paid-attempt warning, destination,
+and each reference's safe alias, authority, role, purpose, and subject ID. The
 complete public plan remains available for trace review. The raw brief is never
 written to artifact sidecars; sidecars retain only its schema version, hash, and
 source.
@@ -118,16 +121,16 @@ reported probe is historical operator evidence without a packaged response
 digest; it is not independently verified by this release. The
 `thinking_behavior` field distinguishes a client override, a documented
 provider default, a provider default that Google does not currently state, and
-a route where the control does not apply. Every plan
-exposes `output_mime_documentation_conflict: true` and its route-specific
+a route where the control does not apply. Every plan exposes
+`output_mime_documentation_conflict: true` and its route-specific
 source-conflict note. A redacted local probe using `gemini-3-pro-image` was
 reported to reject PNG on 2026-08-28; it did not directly test
-`gemini-3.1-flash-image`. The Interactions reference lists only JPEG, while the
-generateContent response-format enum exposes only `IMAGE_JPEG`. Because the
-package contains no durable response digest for the probe, Banana treats the
-Pro result as reported corroboration only. It rejects all PNG output plans as a
-conservative API-surface policy during planning. These disclosures are part of
-the approval fingerprint.
+`gemini-3.1-flash-image` or `gemini-nano-banana-2.1`. The Interactions
+reference lists only JPEG, while the generateContent response-format enum
+exposes only `IMAGE_JPEG`. Because the package contains no durable response
+digest for the probe, Banana treats the Pro result as reported corroboration
+only. It rejects all PNG output plans as a conservative API-surface policy
+during planning. These disclosures are part of the approval fingerprint.
 
 For video plans, `video_url_syntax_validated` means only that the URL matches
 Banana's strict HTTPS YouTube host, path, and 11-character ID allowlist. The
@@ -170,8 +173,8 @@ Markup alone cannot receive a pixel Pass.
 
 Consumes one exact-plan approval capability, then makes one provider attempt
 through the API surface bound to the model. It can create a new image, use
-references, use Flash Image video input, ground a supported model, or continue
-a stored Interactions session.
+references, use video input on Nano Banana 2.1 or Flash Image, ground a
+supported model, or continue a stored Interactions session.
 
 ### `banana_edit`
 
@@ -233,10 +236,14 @@ Execution tools:
    fail closed;
 9. return `transport_ok: true`, `visual_review_status: needs_review`, absolute
    paths, hashes, byte counts, MIME types, dimensions when detectable,
-   allowlisted usage, and transient grounding attribution. A raw transient
-   interaction ID is returned only after the user explicitly approves
-   `store: true` for provider-managed continuation. Sidecars retain only a
-   one-way interaction-ID hash;
+   allowlisted usage, and transient grounding attribution. Usage keeps
+   Google's documented field names: on Interactions, `total_input_tokens`,
+   `total_output_tokens`, `total_thought_tokens`, `total_cached_tokens`,
+   `total_tool_use_tokens`, `total_tokens`, and the `*_tokens_by_modality`
+   lists; on generateContent, the `*TokenCount` fields and the `*TokensDetails`
+   lists. A raw transient interaction ID is returned only after the user
+   explicitly approves `store: true` for provider-managed continuation.
+   Sidecars retain only a one-way interaction-ID hash;
 10. precede every returned MCP image with its explicit identity and attribution;
 11. record only a short non-sensitive label in the private cost ledger unless
     raw prompt recording was explicitly requested.
@@ -313,7 +320,7 @@ The bundled scripts use the same core:
 ```bash
 python3 "${CLAUDE_SKILL_DIR}/scripts/generate.py" --prompt "..."
 python3 "${CLAUDE_SKILL_DIR}/scripts/edit.py" --image /path/source.png --reference-name "front product photo" --reference-role object --reference-purpose "preserve geometry" --brief-file /path/brief.json --prompt "..."
-python3 "${CLAUDE_SKILL_DIR}/scripts/portfolio.py" --prompt "..." --model gemini-3.1-flash-image --brief-file /path/brief.json
+python3 "${CLAUDE_SKILL_DIR}/scripts/portfolio.py" --prompt "..." --model gemini-nano-banana-2.1 --brief-file /path/brief.json
 ```
 
 They plan by default. Execution requires `--execute --confirm APPROVAL_ID`. The

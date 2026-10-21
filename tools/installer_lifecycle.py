@@ -165,13 +165,6 @@ def _require_path_matches(path: Path, metadata: os.stat_result) -> None:
         _fail()
 
 
-def _entry_identity(
-    parent_descriptor: int, name: str
-) -> tuple[os.stat_result, tuple[int, int]]:
-    metadata = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
-    return metadata, _identity(metadata)
-
-
 def _rename_no_replace(
     source_name: str,
     destination_name: str,

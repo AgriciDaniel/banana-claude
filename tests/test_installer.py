@@ -240,7 +240,7 @@ class InstallerTests(unittest.TestCase):
             self.assertTrue((skill / "SKILL.md").is_file())
             self.assertFalse((home / ".banana").exists())
             self.assertEqual(
-                json.loads(marker.read_text(encoding="utf-8"))["version"], "3.0.0"
+                json.loads(marker.read_text(encoding="utf-8"))["version"], "3.1.0"
             )
             self.assertTrue(os.access(skill / "scripts" / "generate.py", os.X_OK))
             expected_files = {

@@ -28,7 +28,7 @@ They live under $BANANA_HOME/presets, defaulting to ~/.banana/presets.
         }
       ],
       "anti_references": ["generic glossy technology pedestal"],
-      "default_model": "gemini-3.1-flash-image",
+      "default_model": "gemini-nano-banana-2.1",
       "default_aspect_ratio": "16:9",
       "default_image_size": "1K"
     }
