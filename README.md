@@ -95,17 +95,6 @@ Those remain review conditions, not marketing claims.
 
 Read [Security and privacy](SECURITY.md) before production use.
 
-## Upgrade from public 1.4.1 or 2.1.0 installs
-
-Do not simply overwrite an older public install. It may have left an unpinned
-third-party MCP entry, a raw Google key in Claude settings, or an obsolete skill
-directory. Version 3 includes a redacted scan, review-first cleanup, and explicit
-state migrations.
-
-Follow the [upgrade guide](docs/guide.md#upgrade-from-141-or-210) before enabling
-version 3. Rotate any key that an older setup stored on disk or exposed in shell
-history.
-
 ## Documentation
 
 - [User guide](docs/guide.md): installation, upgrades, workflows, and direct
