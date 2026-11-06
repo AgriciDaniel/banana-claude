@@ -1,4 +1,4 @@
 # Development and release verification only. The Banana runtime remains
 # standard-library-only.
-mypy==2.4.0
+mypy==2.4.1
 ruff==0.17.0
